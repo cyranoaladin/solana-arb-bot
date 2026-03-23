@@ -1,0 +1,17 @@
+[Unit]
+Description=Solana Arbitrage Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/solana-arb-bot
+EnvironmentFile=/opt/solana-arb-bot/.env
+ExecStart=/usr/bin/python3 -m detector.main
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/arb-bot/bot.log
+StandardError=append:/var/log/arb-bot/error.log
+
+[Install]
+WantedBy=multi-user.target
