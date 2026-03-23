@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from detector.config import BotConfig
 from detector.price_fetcher import PriceFetcher
