@@ -47,7 +47,7 @@ class ExecutorBridge:
             "--dex", dex,
             "--min-out", str(min_out),
             "--rpc-url", self.rpc_url,
-            "--keypair", self.keypair_path,
+            "--keypair-path", self.keypair_path,
         ]
         if dry_run:
             args.append("--dry-run")
@@ -74,7 +74,7 @@ class ExecutorBridge:
             self.executor_path,
             "balance",
             "--rpc-url", self.rpc_url,
-            "--keypair", self.keypair_path,
+            "--keypair-path", self.keypair_path,
         ]
 
         try:
