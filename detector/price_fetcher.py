@@ -1,8 +1,9 @@
-"""Price fetcher module — retrieves quotes from Jupiter API."""
+"""Price fetcher module — retrieves quotes from Orca and Raydium APIs."""
 
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -18,13 +19,13 @@ TOKEN_MINTS = {
 
 TOKEN_DECIMALS = {"SOL": 9, "USDC": 6, "USDT": 6}
 
-JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
+ORCA_POOLS_URL = "https://api.orca.so/v2/solana/pools"
+RAYDIUM_POOLS_URL = "https://api-v3.raydium.io/pools/info/mint"
 
 
 @dataclass
 class PriceQuote:
     """A price quote from a DEX."""
-
     dex: str
     input_token: str
     output_token: str
@@ -34,70 +35,110 @@ class PriceQuote:
 
 
 class PriceFetcher:
-    """Fetches token prices from on-chain DEX aggregators."""
+    """Fetches token prices from Orca and Raydium DEX APIs."""
 
     def __init__(self, rpc_url: str) -> None:
         self.rpc_url = rpc_url
-        self.client = httpx.AsyncClient(timeout=5)
+        self.client = httpx.AsyncClient(timeout=10)
 
-    async def get_jupiter_price(
-        self,
-        input_token: str,
-        output_token: str,
-        amount: float,
+    async def get_orca_price(
+        self, input_token: str, output_token: str, amount: float,
     ) -> Optional[float]:
-        """Fetch a quote from Jupiter Quote API v6.
-
-        Returns the output amount as a float (adjusted for decimals), or None on error.
-        """
+        """Fetch price from Orca Whirlpool API using sqrtPrice."""
         try:
             input_mint = TOKEN_MINTS[input_token]
             output_mint = TOKEN_MINTS[output_token]
-            input_decimals = TOKEN_DECIMALS[input_token]
-            output_decimals = TOKEN_DECIMALS[output_token]
-
-            raw_amount = int(amount * (10 ** input_decimals))
+            input_dec = TOKEN_DECIMALS[input_token]
+            output_dec = TOKEN_DECIMALS[output_token]
 
             response = await self.client.get(
-                JUPITER_QUOTE_URL,
+                ORCA_POOLS_URL,
+                params={"tokenA": input_mint, "tokenB": output_mint},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            pools = data.get("data", [])
+            if not pools:
+                return None
+
+            # Use the pool with highest liquidity
+            pool = max(pools, key=lambda p: int(p.get("liquidity", "0")))
+            sqrt_price = int(pool["sqrtPrice"])
+
+            # sqrtPrice is Q64.64 fixed point: price = (sqrtPrice / 2^64)^2
+            price_raw = (sqrt_price / (2 ** 64)) ** 2
+            # Adjust for decimal difference
+            decimal_adjustment = 10 ** (input_dec - output_dec)
+            price = price_raw * decimal_adjustment
+
+            output_amount = amount * price
+            return output_amount
+        except Exception:
+            logger.exception("Failed to fetch Orca price for %s -> %s", input_token, output_token)
+            return None
+
+    async def get_raydium_price(
+        self, input_token: str, output_token: str, amount: float,
+    ) -> Optional[float]:
+        """Fetch price from Raydium V3 API."""
+        try:
+            input_mint = TOKEN_MINTS[input_token]
+            output_mint = TOKEN_MINTS[output_token]
+
+            response = await self.client.get(
+                RAYDIUM_POOLS_URL,
                 params={
-                    "inputMint": input_mint,
-                    "outputMint": output_mint,
-                    "amount": str(raw_amount),
-                    "slippageBps": "50",
+                    "mint1": input_mint,
+                    "mint2": output_mint,
+                    "poolType": "standard",
+                    "poolSortField": "liquidity",
+                    "sortType": "desc",
+                    "pageSize": "1",
                 },
             )
             response.raise_for_status()
             data = response.json()
 
-            raw_out = int(data["outAmount"])
-            return raw_out / (10 ** output_decimals)
+            pools = data.get("data", {}).get("data", [])
+            if not pools:
+                return None
+
+            pool = pools[0]
+            price = float(pool.get("price", 0))
+            if price <= 0:
+                return None
+
+            output_amount = amount * price
+            return output_amount
         except Exception:
-            logger.exception("Failed to fetch Jupiter quote for %s -> %s", input_token, output_token)
+            logger.exception("Failed to fetch Raydium price for %s -> %s", input_token, output_token)
             return None
 
     async def get_all_prices(
-        self,
-        input_token: str,
-        output_token: str,
-        amount: float,
+        self, input_token: str, output_token: str, amount: float,
     ) -> list[PriceQuote]:
         """Fetch prices from all supported DEXes and return a list of PriceQuote."""
         quotes: list[PriceQuote] = []
 
-        jup_output = await self.get_jupiter_price(input_token, output_token, amount)
-        if jup_output is not None:
-            price = jup_output / amount if amount else 0.0
-            quotes.append(
-                PriceQuote(
-                    dex="jupiter",
-                    input_token=input_token,
-                    output_token=output_token,
-                    input_amount=amount,
-                    output_amount=jup_output,
-                    price=price,
-                )
-            )
+        # Fetch Orca and Raydium in parallel
+        import asyncio
+        orca_task = asyncio.create_task(self.get_orca_price(input_token, output_token, amount))
+        raydium_task = asyncio.create_task(self.get_raydium_price(input_token, output_token, amount))
+
+        orca_out, raydium_out = await asyncio.gather(orca_task, raydium_task)
+
+        if orca_out is not None and orca_out > 0:
+            quotes.append(PriceQuote(
+                dex="orca", input_token=input_token, output_token=output_token,
+                input_amount=amount, output_amount=orca_out, price=orca_out / amount,
+            ))
+
+        if raydium_out is not None and raydium_out > 0:
+            quotes.append(PriceQuote(
+                dex="raydium", input_token=input_token, output_token=output_token,
+                input_amount=amount, output_amount=raydium_out, price=raydium_out / amount,
+            ))
 
         return quotes
 
