@@ -1,0 +1,17 @@
+[Unit]
+Description=Solana Arb Bot — Dashboard
+After=arb-bot.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/solana-arb-bot
+EnvironmentFile=/opt/solana-arb-bot/.env
+ExecStart=/usr/bin/python3 dashboard/app.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/arb-bot/dashboard.log
+StandardError=append:/var/log/arb-bot/dashboard-error.log
+
+[Install]
+WantedBy=multi-user.target

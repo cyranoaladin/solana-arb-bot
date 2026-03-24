@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solana Arb Bot — Feuille de route</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --bg2: #0f1218;
+    --bg3: #151a22;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --accent: #14f195;
+    --accent2: #9945ff;
+    --accent3: #f0c040;
+    --accent4: #e84142;
+    --coral: #ff6b4a;
+    --info: #38bdf8;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Space Grotesk', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 60px 48px 48px;
+    border-bottom: 1px solid var(--border2);
+    background: var(--bg2);
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: -80px;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(20,241,149,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-top { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .badge-sol { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(20,241,149,0.1); border: 1px solid rgba(20,241,149,0.25); padding: 4px 10px; border-radius: 4px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .badge-ver { font-family: var(--mono); font-size: 11px; color: var(--muted); border: 1px solid var(--border2); padding: 4px 10px; border-radius: 4px; }
+  .hero h1 { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 12px; }
+  .hero h1 span { color: var(--accent); }
+  .hero-sub { font-size: 16px; color: var(--muted); max-width: 600px; }
+  .hero-meta { display: flex; gap: 32px; margin-top: 28px; flex-wrap: wrap; }
+  .hero-meta-item { display: flex; flex-direction: column; gap: 2px; }
+  .hero-meta-item .label { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--mono); }
+  .hero-meta-item .value { font-size: 14px; color: var(--text); font-weight: 500; }
+
+  .nav { display: flex; gap: 4px; padding: 12px 48px; background: var(--bg); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; overflow-x: auto; }
+  .nav a { font-size: 12px; font-family: var(--mono); color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 4px; white-space: nowrap; transition: all 0.15s; border: 1px solid transparent; }
+  .nav a:hover { color: var(--text); border-color: var(--border2); background: var(--bg3); }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 48px; }
+  section { margin-bottom: 72px; }
+
+  .section-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 32px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .section-num { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; }
+  .section-header h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+
+  .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .metric-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: 10px; padding: 20px; text-align: center; }
+  .metric-value { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--accent); display: block; margin-bottom: 4px; }
+  .metric-label { font-size: 12px; color: var(--muted); }
+
+  .phase-grid { display: flex; flex-direction: column; gap: 24px; }
+  .phase-card { border: 1px solid var(--border2); border-radius: 12px; overflow: hidden; background: var(--bg2); }
+  .phase-header { display: flex; align-items: center; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .phase-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .phase-header h3 { font-size: 16px; font-weight: 600; flex: 1; }
+  .phase-timeline { font-family: var(--mono); font-size: 11px; color: var(--muted); border: 1px solid var(--border2); padding: 3px 8px; border-radius: 4px; }
+  .phase-status { font-size: 11px; font-family: var(--mono); padding: 3px 8px; border-radius: 4px; }
+  .status-now { background: rgba(20,241,149,0.1); color: var(--accent); border: 1px solid rgba(20,241,149,0.25); }
+  .status-next { background: rgba(153,69,255,0.1); color: var(--accent2); border: 1px solid rgba(153,69,255,0.25); }
+  .status-later { background: rgba(240,192,64,0.1); color: var(--accent3); border: 1px solid rgba(240,192,64,0.25); }
+  .status-pro { background: rgba(232,65,66,0.1); color: var(--accent4); border: 1px solid rgba(232,65,66,0.25); }
+  .phase-body { padding: 24px; }
+
+  .task-list { display: flex; flex-direction: column; gap: 12px; }
+  .task { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border); }
+  .task-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; margin-top: 1px; }
+  .task-content { flex: 1; }
+  .task-title { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .task-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .task-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .tag { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .tag-rust { background: rgba(232,65,66,0.1); color: #f28c8c; border: 1px solid rgba(232,65,66,0.2); }
+  .tag-python { background: rgba(56,189,248,0.1); color: var(--info); border: 1px solid rgba(56,189,248,0.2); }
+  .tag-mcp { background: rgba(153,69,255,0.12); color: #c4a0ff; border: 1px solid rgba(153,69,255,0.25); }
+  .tag-ai { background: rgba(20,241,149,0.1); color: var(--accent); border: 1px solid rgba(20,241,149,0.2); }
+  .tag-infra { background: rgba(240,192,64,0.1); color: var(--accent3); border: 1px solid rgba(240,192,64,0.2); }
+  .tag-critical { background: rgba(232,65,66,0.2); color: #ff8080; border: 1px solid rgba(232,65,66,0.35); }
+  .tag-solana { background: rgba(20,241,149,0.08); color: #6ee7b7; border: 1px solid rgba(20,241,149,0.15); }
+
+  .mcp-grid { display: grid; gap: 16px; }
+  .mcp-card { border: 1px solid var(--border2); border-radius: 10px; background: var(--bg2); overflow: hidden; }
+  .mcp-card-header { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .mcp-num { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--muted); min-width: 24px; }
+  .mcp-name { font-size: 15px; font-weight: 600; flex: 1; }
+  .mcp-priority { font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .p1 { background: rgba(232,65,66,0.12); color: var(--accent4); border: 1px solid rgba(232,65,66,0.25); }
+  .p2 { background: rgba(240,192,64,0.12); color: var(--accent3); border: 1px solid rgba(240,192,64,0.25); }
+  .p3 { background: rgba(153,69,255,0.12); color: #c4a0ff; border: 1px solid rgba(153,69,255,0.25); }
+  .p4 { background: rgba(100,116,139,0.15); color: var(--muted); border: 1px solid var(--border2); }
+  .mcp-card-body { padding: 16px 20px; }
+  .mcp-desc { font-size: 13px; color: var(--muted); margin-bottom: 14px; line-height: 1.55; }
+  .mcp-tools-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+  .mcp-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .tool-pill { font-family: var(--mono); font-size: 11px; color: #c4a0ff; background: rgba(153,69,255,0.08); border: 1px solid rgba(153,69,255,0.18); padding: 3px 9px; border-radius: 4px; }
+  .mcp-impact { font-size: 12px; color: var(--text); display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; background: rgba(20,241,149,0.04); border: 1px solid rgba(20,241,149,0.1); border-radius: 6px; }
+  .mcp-impact::before { content: '↗'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+  .code-block { background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 16px 20px; font-family: var(--mono); font-size: 12px; color: #94a3b8; overflow-x: auto; margin-top: 12px; line-height: 1.7; }
+  .code-block .kw { color: var(--accent2); }
+  .code-block .str { color: var(--accent); }
+  .code-block .cmt { color: #334155; }
+  .code-block .fn { color: var(--info); }
+
+  .ai-grid { display: grid; gap: 16px; }
+  .ai-card { border: 1px solid var(--border2); border-radius: 10px; background: var(--bg2); padding: 20px; }
+  .ai-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .ai-logo { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; font-family: var(--mono); flex-shrink: 0; }
+  .ai-name { font-size: 15px; font-weight: 600; flex: 1; }
+  .ai-use-case { font-size: 11px; font-family: var(--mono); color: var(--muted); border: 1px solid var(--border2); padding: 3px 8px; border-radius: 4px; }
+  .ai-desc { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 12px; }
+  .ai-strengths { display: flex; flex-wrap: wrap; gap: 6px; }
+  .strength-pill { font-size: 11px; padding: 3px 9px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); }
+
+  .archi-block { font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 24px; overflow-x: auto; color: #94a3b8; line-height: 1.8; white-space: pre; }
+  .archi-block .g { color: var(--accent); }
+  .archi-block .p { color: #c4a0ff; }
+  .archi-block .y { color: var(--accent3); }
+  .archi-block .r { color: var(--coral); }
+  .archi-block .b { color: var(--info); }
+  .archi-block .dim { color: #334155; }
+
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 1px; background: var(--border2); }
+  .tl-item { position: relative; margin-bottom: 24px; }
+  .tl-item::before { content: ''; position: absolute; left: -24px; top: 6px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); }
+  .tl-week { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-bottom: 4px; letter-spacing: 0.06em; }
+  .tl-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .tl-desc { font-size: 13px; color: var(--muted); }
+
+  .risk-table { width: 100%; border-collapse: collapse; }
+  .risk-table th { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border2); }
+  .risk-table td { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text); }
+  .risk-table tr:last-child td { border-bottom: none; }
+  .risk-table tr:hover td { background: var(--bg3); }
+  .risk-badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; font-family: var(--mono); font-weight: 600; }
+  .risk-high { background: rgba(232,65,66,0.15); color: var(--accent4); }
+  .risk-med { background: rgba(240,192,64,0.15); color: var(--accent3); }
+  .risk-low { background: rgba(20,241,149,0.1); color: var(--accent); }
+
+  .footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; font-family: var(--mono); background: var(--bg2); }
+  .footer .accent { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    .hero, .container, .footer { padding-left: 20px; padding-right: 20px; }
+    .nav { padding-left: 20px; }
+    .hero h1 { font-size: 28px; }
+    .metrics-row { grid-template-columns: 1fr 1fr; }
+    .phase-header { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-top">
+    <span class="badge-sol">Solana Mainnet</span>
+    <span class="badge-ver">Roadmap v1.0 — Mars 2026</span>
+  </div>
+  <h1>Solana Arb Bot<br><span>Feuille de route complète</span></h1>
+  <p class="hero-sub">De la V1 fonctionnelle à un système d'arbitrage professionnel, adaptatif et supervisé par IA — toutes les étapes, tous les MCP, tous les modèles.</p>
+  <div class="hero-meta">
+    <div class="hero-meta-item"><span class="label">Auteur</span><span class="value">Alaeddine Ben Rhouma</span></div>
+    <div class="hero-meta-item"><span class="label">VPS</span><span class="value">Hetzner 46.224.150.0</span></div>
+    <div class="hero-meta-item"><span class="label">Capital initial</span><span class="value">~0.35 SOL</span></div>
+    <div class="hero-meta-item"><span class="label">Stack</span><span class="value">Python · Rust · Solana · MCP</span></div>
+    <div class="hero-meta-item"><span class="label">Horizon</span><span class="value">V1 → V4 / 6 mois</span></div>
+  </div>
+</div>
+
+<nav class="nav">
+  <a href="#diagnostic">Diagnostic</a>
+  <a href="#phases">Phases</a>
+  <a href="#mcp">MCP Servers</a>
+  <a href="#ai">Modèles IA</a>
+  <a href="#archi">Architecture</a>
+  <a href="#timeline">Calendrier</a>
+  <a href="#risques">Risques</a>
+</nav>
+
+<div class="container">
+
+  <section id="diagnostic">
+    <div class="section-header">
+      <span class="section-num">00</span>
+      <h2>Diagnostic de la V1 actuelle</h2>
+    </div>
+
+    <div class="metrics-row">
+      <div class="metric-card"><span class="metric-value">50ms</span><span class="metric-label">Latence détection Python</span></div>
+      <div class="metric-card"><span class="metric-value">3s</span><span class="metric-label">Intervalle de polling</span></div>
+      <div class="metric-card"><span class="metric-value">0</span><span class="metric-label">Jito bundles (MEV)</span></div>
+      <div class="metric-card"><span class="metric-value">0</span><span class="metric-label">MCP servers actifs</span></div>
+      <div class="metric-card"><span class="metric-value">2</span><span class="metric-label">Paires surveillées</span></div>
+    </div>
+
+    <div class="task-list">
+      <div class="task">
+        <div class="task-icon">⚠</div>
+        <div class="task-content">
+          <div class="task-title">Priority fees statiques</div>
+          <div class="task-desc">Le bot envoie des transactions au tarif plancher sans consulter les conditions réseau en temps réel. En période de congestion, les transactions tombent ou se font systématiquement devancer. Première cause d'échec d'atterrissage — estimée responsable de 40-60% des transactions échouées.</div>
+          <div class="task-tags"><span class="tag tag-critical">Critique</span><span class="tag tag-rust">Rust</span><span class="tag tag-python">Python</span></div>
+        </div>
+      </div>
+      <div class="task">
+        <div class="task-icon">⚠</div>
+        <div class="task-content">
+          <div class="task-title">Polling HTTP toutes les 3 secondes</div>
+          <div class="task-desc">3 secondes entre chaque fetch, c'est 7-8 blocs Solana d'intervalle (400ms/bloc). Les opportunités d'arbitrage significatives disparaissent en 1-3 blocs. Le bot arrive structurellement en retard sur toutes les opportunités courtes et ne capture que les spreads persistants, qui sont aussi les plus compétitifs.</div>
+          <div class="task-tags"><span class="tag tag-critical">Critique</span><span class="tag tag-python">Python</span></div>
+        </div>
+      </div>
+      <div class="task">
+        <div class="task-icon">⚠</div>
+        <div class="task-content">
+          <div class="task-title">Paramètres figés dans .env</div>
+          <div class="task-desc">MIN_PROFIT_PCT et MAX_SLIPPAGE_PCT sont des constantes statiques. Aucune adaptation aux conditions de marché, à la volatilité, ni à la congestion réseau. Toute modification nécessite un SSH dans le VPS + redémarrage du service. Incompatible avec une supervision IA temps réel.</div>
+          <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-infra">Infra</span></div>
+        </div>
+      </div>
+      <div class="task">
+        <div class="task-icon">⚠</div>
+        <div class="task-content">
+          <div class="task-title">Zéro supervision IA depuis l'extérieur</div>
+          <div class="task-desc">Pas d'interface pour qu'un agent puisse interroger l'état du bot, analyser les logs ou ajuster les paramètres sans accès SSH direct. Le bot est une boîte noire depuis l'extérieur, sauf les notifications Telegram basiques qui sont unidirectionnelles.</div>
+          <div class="task-tags"><span class="tag tag-ai">IA</span><span class="tag tag-mcp">MCP</span></div>
+        </div>
+      </div>
+      <div class="task">
+        <div class="task-icon">⚠</div>
+        <div class="task-content">
+          <div class="task-title">Exécution standard vulnérable au MEV</div>
+          <div class="task-desc">Sans Jito bundles, les transactions passent par le mempool standard et sont lisibles par les bots MEV. Les arbitrages les plus rentables (spread &gt;0.3%) sont front-run à quasi 100% avant d'atterrir. Le bot ne capture que les miettes ignorées par les bots professionnels.</div>
+          <div class="task-tags"><span class="tag tag-rust">Rust</span><span class="tag tag-solana">Solana</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="phases">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>Phases de développement</h2>
+    </div>
+
+    <div class="phase-grid">
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-dot" style="background: var(--accent);"></div>
+          <h3>V1 — Fondations solides</h3>
+          <span class="phase-timeline">Semaines 1–3</span>
+          <span class="phase-status status-now">En cours</span>
+        </div>
+        <div class="phase-body">
+          <div class="task-list">
+            <div class="task">
+              <div class="task-icon">✦</div>
+              <div class="task-content">
+                <div class="task-title">Priority fees dynamiques via Helius MCP</div>
+                <div class="task-desc">Avant chaque appel au binaire Rust, interroger getPriorityFeeEstimate (Helius Enhanced API) pour obtenir le percentile p75 des fees sur les 150 derniers blocs. Injecter la valeur dans l'argument CLI --priority-fee du binaire Rust. Objectif : taux d'atterrissage &gt; 90% contre ~60% actuellement.</div>
+                <div class="task-tags"><span class="tag tag-critical">Priorité 1</span><span class="tag tag-python">Python</span><span class="tag tag-rust">Rust</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">✦</div>
+              <div class="task-content">
+                <div class="task-title">Simulation avant envoi (simulateTransaction Helius)</div>
+                <div class="task-desc">En mode live, simuler chaque transaction avant signature pour détecter les erreurs de slippage, de liquidité insuffisante ou de quota RPC. Élimine les 5000 lamports perdus à chaque transaction ratée. Économie estimée : 5-15% du budget de fees en charge normale.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-rust">Rust</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">✦</div>
+              <div class="task-content">
+                <div class="task-title">Logging structuré JSON + health check HTTP</div>
+                <div class="task-desc">Remplacer le logging texte libre par un format JSON structuré (timestamp ISO, niveau, paire, dex, montant, profit_pct, fee, tx_hash). Exposer GET /health sur port 8080 retournant statut, solde, trades count, profit total. Permet le monitoring UptimeRobot et l'alimentation de dashboards.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-infra">Infra</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">✦</div>
+              <div class="task-content">
+                <div class="task-title">Tests unitaires complets + CI GitHub Actions</div>
+                <div class="task-desc">Couverture &gt; 80% sur detector/ (arbitrage.py, price_fetcher.py, executor_bridge.py). Pipeline CI : lint → tests → cargo check → cargo clippy → build release. Badge de statut dans le README. Aucun merge sans CI verte.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-rust">Rust</span><span class="tag tag-infra">Infra</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">✦</div>
+              <div class="task-content">
+                <div class="task-title">Backoff exponentiel + circuit breaker RPC</div>
+                <div class="task-desc">Implémenter un circuit breaker sur les appels RPC Helius : si 3 erreurs consécutives, pause 30s puis retry progressif. Évite les bans de rate limit en cascade. Log des erreurs RPC séparément des erreurs de trade pour distinguer les problèmes d'infrastructure des problèmes de stratégie.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-infra">Infra</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-dot" style="background: var(--accent2);"></div>
+          <h3>V2 — Intelligence & supervision IA</h3>
+          <span class="phase-timeline">Semaines 4–7</span>
+          <span class="phase-status status-next">Suivant</span>
+        </div>
+        <div class="phase-body">
+          <div class="task-list">
+            <div class="task">
+              <div class="task-icon">◆</div>
+              <div class="task-content">
+                <div class="task-title">arb-control MCP server (Python custom)</div>
+                <div class="task-desc">Construire un serveur MCP avec le SDK officiel Python qui expose l'état interne du bot en tools appelables par un agent IA : get_live_state, get_session_stats, get_recent_logs(n), set_param(name, value), pause_trading, resume_trading, force_dry_run, get_open_opportunities. Branché sur Nexus, permet la supervision en langage naturel depuis Telegram sans SSH.</div>
+                <div class="task-tags"><span class="tag tag-critical">Priorité 1</span><span class="tag tag-mcp">MCP</span><span class="tag tag-ai">IA</span><span class="tag tag-python">Python</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">◆</div>
+              <div class="task-content">
+                <div class="task-title">WebSocket price feeds (Helius geyser / Jupiter WS)</div>
+                <div class="task-desc">Remplacer le polling httpx 3s par une connexion WebSocket permanente. Helius Geyser expose les changements de compte en temps réel. Jupiter maintient un WebSocket de prix. Latence de détection : de 3000ms à 50-200ms. Divise par 10-60 le délai entre opportunité et détection.</div>
+                <div class="task-tags"><span class="tag tag-critical">Priorité 1</span><span class="tag tag-python">Python</span><span class="tag tag-solana">Solana</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">◆</div>
+              <div class="task-content">
+                <div class="task-title">Bilan IA nocturne automatique (Claude Haiku)</div>
+                <div class="task-desc">Chaque nuit à 2h, un job Python envoie les logs JSON du bot à Claude Haiku via l'API Anthropic. Prompt structuré demandant : opportunités manquées, heures de pic, ratio succès/échec par DEX, recommandations de paramètres, anomalies détectées. Résultat envoyé automatiquement sur Telegram.</div>
+                <div class="task-tags"><span class="tag tag-ai">IA</span><span class="tag tag-python">Python</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">◆</div>
+              <div class="task-content">
+                <div class="task-title">Slippage dynamique via Jupiter MCP</div>
+                <div class="task-desc">Utiliser swapInstructions avec dynamicSlippage=true pour que Jupiter calcule le slippage optimal en temps réel selon la profondeur du pool, au lieu de la constante statique 0.5% qui sur-protège sur les pools liquides (pertes de profit) et sous-protège sur les pools minces (transactions échouées).</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-solana">Solana</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">◆</div>
+              <div class="task-content">
+                <div class="task-title">Seuils adaptatifs basés sur la volatilité</div>
+                <div class="task-desc">Calculer un score de volatilité interne (écart-type glissant des prix sur les 100 derniers checks). En haute volatilité : monter automatiquement MIN_PROFIT_PCT à 0.25% pour filtrer le bruit. En basse volatilité : descendre à 0.07% pour capter plus d'opportunités. Réduction des faux positifs estimée : 30-40%.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-ai">IA</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">◆</div>
+              <div class="task-content">
+                <div class="task-title">PostgreSQL local + MCP analytics</div>
+                <div class="task-desc">Remplacer le logging fichier par une base PostgreSQL locale. Chaque trade inséré avec tous ses attributs (paire, DEX, montant, profit_estimé, profit_réel, fee, tx_hash, status, timestamp). MCP query tool pour que l'agent puisse faire des analyses complexes : "quel est mon meilleur DEX les lundis matin".</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-mcp">MCP</span><span class="tag tag-infra">Infra</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-dot" style="background: var(--accent3);"></div>
+          <h3>V3 — MEV protection & multi-DEX</h3>
+          <span class="phase-timeline">Semaines 8–13</span>
+          <span class="phase-status status-later">Futur</span>
+        </div>
+        <div class="phase-body">
+          <div class="task-list">
+            <div class="task">
+              <div class="task-icon">▸</div>
+              <div class="task-content">
+                <div class="task-title">Jito bundles (Jito SDK Rust)</div>
+                <div class="task-desc">Intégrer le Jito block engine dans le binaire Rust pour soumettre des bundles de transactions atomiques. Les bundles sont invisibles dans le mempool standard : protection totale contre le front-running. Exécution en un seul bloc ou rien (atomicité). Tip : 5000-10000 lamports par bundle selon la compétition.</div>
+                <div class="task-tags"><span class="tag tag-critical">High impact</span><span class="tag tag-rust">Rust</span><span class="tag tag-solana">Solana</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">▸</div>
+              <div class="task-content">
+                <div class="task-title">Arbitrage triangulaire (SOL → A → B → SOL)</div>
+                <div class="task-desc">Étendre le moteur d'arbitrage aux routes triangulaires via le graphe Jupiter. Multiplier les sources d'opportunités sans augmenter le capital. Nécessite une révision complète de arbitrage.py pour le pathfinding sur graphe de prix et des transactions multi-hop atomiques côté Rust.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-rust">Rust</span><span class="tag tag-solana">Solana</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">▸</div>
+              <div class="task-content">
+                <div class="task-title">DEX supplémentaires : Meteora DLMM, Lifinity, Whirlpool</div>
+                <div class="task-desc">Ajouter Meteora Dynamic Liquidity Market Maker et Lifinity comme sources de prix dans price_fetcher.py. Ces DEX concentrés offrent des spreads spécifiques souvent inexploités par les bots qui n'interrogent que Raydium/Orca. Extension à 8-12 paires actives.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-solana">Solana</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">▸</div>
+              <div class="task-content">
+                <div class="task-title">Modèle ML de scoring d'opportunités (XGBoost)</div>
+                <div class="task-desc">Entraîner un modèle XGBoost sur l'historique des trades. Features : spread détecté, volume 5min du pool, heure UTC, jour semaine, congestion réseau, volatilité 1h, TVL pool, score DEX historique. Prédiction binaire : cette opportunité sera-t-elle encore valide à l'atterrissage ? Inférence &lt;1ms en Python.</div>
+                <div class="task-tags"><span class="tag tag-ai">IA</span><span class="tag tag-python">Python</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">▸</div>
+              <div class="task-content">
+                <div class="task-title">Dashboard web temps réel (Flask + HTMX)</div>
+                <div class="task-desc">Interface légère sur port 3000 (auth basique) affichant : P&amp;L temps réel, courbe de solde, heatmap horaires rentables, liste des derniers trades avec statut. Données servies par Server-Sent Events depuis le bot Python. Accessible via tunnel Tailscale depuis le PC local.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-infra">Infra</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-header">
+          <div class="phase-dot" style="background: var(--accent4);"></div>
+          <h3>V4 — Migration Rust pure & production</h3>
+          <span class="phase-timeline">Semaines 14–24</span>
+          <span class="phase-status status-pro">Pro</span>
+        </div>
+        <div class="phase-body">
+          <div class="task-list">
+            <div class="task">
+              <div class="task-icon">●</div>
+              <div class="task-content">
+                <div class="task-title">Réécriture de la détection en Rust (tokio + reqwest)</div>
+                <div class="task-desc">Migrer price_fetcher.py et arbitrage.py en Rust pur. Latence de détection : de 50ms à 2-5ms. Un seul binaire Rust autonome gère la détection WebSocket et l'exécution. Supprime le subprocess overhead, le GIL Python, et la couche IPC entre Python et Rust.</div>
+                <div class="task-tags"><span class="tag tag-rust">Rust</span><span class="tag tag-critical">High impact</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">●</div>
+              <div class="task-content">
+                <div class="task-title">RPC dédié Helius Business / QuickNode</div>
+                <div class="task-desc">Passer du free tier (30 req/s, 1M req/mois) à un plan dédié avec 1000+ req/s, WebSocket stable 24/7, accès Geyser plugin pour les feeds temps réel, et SLA de disponibilité. Coût estimé : 50-150$/mois selon le tier. Rentable dès que le bot génère &gt;10$/jour.</div>
+                <div class="task-tags"><span class="tag tag-infra">Infra</span><span class="tag tag-solana">Solana</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">●</div>
+              <div class="task-content">
+                <div class="task-title">Co-location VPS proche des nœuds Solana leaders</div>
+                <div class="task-desc">Déployer sur un serveur géographiquement proche des nœuds validators Solana majoritaires (Falkenstein DE, Ashburn VA). Réduction de la latence réseau : de 80-150ms à 5-20ms. Impact direct sur la compétitivité. Latitude.sh et Hetzner Falkenstein sont les meilleures options.</div>
+                <div class="task-tags"><span class="tag tag-infra">Infra</span><span class="tag tag-critical">High impact</span></div>
+              </div>
+            </div>
+            <div class="task">
+              <div class="task-icon">●</div>
+              <div class="task-content">
+                <div class="task-title">Backtesting engine sur données historiques Birdeye</div>
+                <div class="task-desc">Récupérer 3-6 mois de données de prix tick-by-tick via Birdeye Historical API. Rejouer tous les ticks à travers le moteur de détection et simuler les exécutions avec les fees réelles. Produire un rapport de Sharpe ratio, drawdown max, heures rentables, pour calibrer les paramètres avant tout capital supplémentaire.</div>
+                <div class="task-tags"><span class="tag tag-python">Python</span><span class="tag tag-ai">IA</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="mcp">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2>MCP Servers — Catalogue complet</h2>
+    </div>
+
+    <div class="mcp-grid">
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">01</span>
+          <span class="mcp-name">Helius Enhanced RPC MCP</span>
+          <span class="mcp-priority p1">Priorité 1 · V1</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Premier MCP à intégrer, impact immédiat. Helius expose via son API des fonctions absentes du RPC Solana standard : estimation dynamique des priority fees, simulation de transaction avant envoi, et parsing enrichi des transactions. Intégré dans executor_bridge.py, il permet au bot de calibrer ses fees en temps réel avant chaque envoi.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">getPriorityFeeEstimate</span>
+            <span class="tool-pill">simulateTransaction</span>
+            <span class="tool-pill">parseTransaction</span>
+            <span class="tool-pill">getCompressionProof</span>
+          </div>
+          <div class="mcp-impact">Taux d'atterrissage estimé : de ~60% à ~90% sur les périodes de congestion modérée. Réduction des fees gaspillées sur transactions échouées.</div>
+          <div class="code-block">
+<span class="cmt"># executor_bridge.py — intégration Helius MCP</span>
+<span class="kw">async def</span> <span class="fn">get_priority_fee</span>(self, tx_b64: str) -> int:
+    resp = <span class="kw">await</span> self.helius_mcp.call(
+        <span class="str">"getPriorityFeeEstimate"</span>,
+        {<span class="str">"transaction"</span>: tx_b64,
+         <span class="str">"options"</span>: {<span class="str">"priorityLevel"</span>: <span class="str">"High"</span>}}
+    )
+    <span class="kw">return</span> resp[<span class="str">"priorityFeeEstimate"</span>]  <span class="cmt"># microLamports</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">02</span>
+          <span class="mcp-name">Jupiter Aggregator MCP (officiel)</span>
+          <span class="mcp-priority p1">Priorité 1 · V1</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Jupiter maintient un MCP server officiel qui expose l'intégralité de son API v6 via des tools structurés. Remplace les appels httpx manuels par un protocole typé. L'avantage principal est l'accès à dynamicSlippage — Jupiter calcule le slippage optimal en temps réel selon la profondeur du pool, éliminant la constante statique 0.5% inadaptée.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">quoteGet</span>
+            <span class="tool-pill">swapPost</span>
+            <span class="tool-pill">swapInstructionsPost</span>
+            <span class="tool-pill">programIdToLabel</span>
+            <span class="tool-pill">tokensGet</span>
+          </div>
+          <div class="mcp-impact">Slippage dynamique : économie estimée 0.1-0.2% par trade sur pools SOL/USDC liquides. Déblocage automatique du routage triangulaire multi-hop.</div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">03</span>
+          <span class="mcp-name">arb-control MCP (serveur custom Python)</span>
+          <span class="mcp-priority p1">Priorité 1 · V2</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Serveur MCP à construire avec le SDK officiel Python (pip install mcp). Il expose l'état interne du bot comme des tools appelables par n'importe quel agent MCP-compatible. Une fois branché sur Nexus (@AlaeddineAgent_bot) ou Claude directement, la supervision complète du bot se fait en langage naturel depuis Telegram, sans aucune intervention SSH.</p>
+          <div class="mcp-tools-label">Tools à implémenter</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">get_live_state</span>
+            <span class="tool-pill">get_session_stats</span>
+            <span class="tool-pill">get_recent_logs</span>
+            <span class="tool-pill">set_param</span>
+            <span class="tool-pill">pause_trading</span>
+            <span class="tool-pill">resume_trading</span>
+            <span class="tool-pill">force_dry_run</span>
+            <span class="tool-pill">get_opportunities</span>
+            <span class="tool-pill">get_pnl_curve</span>
+          </div>
+          <div class="mcp-impact">Supervision IA complète sans SSH. L'agent peut analyser les logs, ajuster les params, et redémarrer le bot depuis une commande Telegram en langage naturel.</div>
+          <div class="code-block">
+<span class="cmt"># arb_control_mcp/server.py — squelette</span>
+<span class="kw">from</span> mcp.server <span class="kw">import</span> Server
+<span class="kw">import</span> mcp.server.stdio
+
+server = Server(<span class="str">"arb-control"</span>)
+
+@server.tool()
+<span class="kw">async def</span> <span class="fn">set_param</span>(name: str, value: float) -> dict:
+    <span class="str">"""Modifie un paramètre du bot en temps réel."""</span>
+    ALLOWED = {<span class="str">"min_profit_pct"</span>: (0.05, 2.0),
+               <span class="str">"trade_amount_sol"</span>: (0.01, 0.1)}
+    lo, hi = ALLOWED[name]
+    <span class="kw">assert</span> lo &lt;= value &lt;= hi
+    bot_state.params[name] = value
+    <span class="kw">return</span> {<span class="str">"ok"</span>: <span class="kw">True</span>, <span class="str">"param"</span>: name, <span class="str">"value"</span>: value}
+          </div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">04</span>
+          <span class="mcp-name">Birdeye Analytics MCP</span>
+          <span class="mcp-priority p2">Priorité 2 · V2–V3</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Birdeye est le principal agrégateur de données on-chain Solana. Son API expose des données historiques de prix, volume, et liquidité des pools DEX avec une granularité tick-by-tick. Utilisé pour le backtesting engine (V4), le modèle ML de scoring (V3), et les rapports IA nocturnes enrichis de contexte marché.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">getTokenPriceHistory</span>
+            <span class="tool-pill">getTokenVolume</span>
+            <span class="tool-pill">getPoolLiquidity</span>
+            <span class="tool-pill">getTopTraders</span>
+            <span class="tool-pill">getOHLCV</span>
+          </div>
+          <div class="mcp-impact">Alimente le backtesting V4 et le modèle ML V3. Fournit à l'agent IA des données de contexte marché pour les bilans nocturnes enrichis.</div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">05</span>
+          <span class="mcp-name">DeFiLlama MCP (TVL & liquidité cross-protocol)</span>
+          <span class="mcp-priority p2">Priorité 2 · V2</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">DeFiLlama maintient un MCP server officiel avec les TVL des protocoles DeFi, les données de yield farming, et les flux de liquidité cross-chain. Combiné avec les alertes whale de Solana Tracker, permet à l'agent IA de détecter des migrations de liquidité avant qu'elles n'apparaissent dans les spreads — un signal avancé de quelques minutes.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">getProtocolTVL</span>
+            <span class="tool-pill">getPoolYields</span>
+            <span class="tool-pill">getChainTVL</span>
+            <span class="tool-pill">getProtocolHistory</span>
+          </div>
+          <div class="mcp-impact">Signal avancé sur les migrations de liquidité. Permet d'anticiper l'ouverture de spreads avant qu'ils ne soient exploitables, et de les éviter quand ils se referment.</div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">06</span>
+          <span class="mcp-name">Telegram Bot MCP (wrapper notifications)</span>
+          <span class="mcp-priority p2">Priorité 2 · V2</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Wrapper MCP du bot Telegram existant. Centralise toutes les notifications dans un seul composant appelable par l'agent IA. L'agent peut composer des messages riches avec des charts PNG générés côté Python (matplotlib), envoyer des rapports structurés avec des tableaux, ou déclencher des alertes critiques avec priorité haute.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">send_alert</span>
+            <span class="tool-pill">send_report_md</span>
+            <span class="tool-pill">send_chart_image</span>
+            <span class="tool-pill">send_trade_summary</span>
+            <span class="tool-pill">get_recent_alerts</span>
+          </div>
+          <div class="mcp-impact">L'agent peut envoyer des rapports formatés avec graphiques directement depuis ses analyses. Unifie le canal de notification pour toutes les composantes du système.</div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">07</span>
+          <span class="mcp-name">VPS Operations MCP (Bash wrapper custom)</span>
+          <span class="mcp-priority p3">Priorité 3 · V2</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Serveur MCP minimaliste (50 lignes Python) qui wrappe des commandes systemd, des lectures de métriques système, et des opérations de déploiement sur le VPS. Permet à l'agent de redémarrer le service, lire les logs, checker la charge CPU, ou déclencher un git pull + cargo build + restart — sans exposer un accès SSH complet. Surface d'attaque réduite, chaque action est auditée.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">restart_service</span>
+            <span class="tool-pill">get_logs</span>
+            <span class="tool-pill">get_system_metrics</span>
+            <span class="tool-pill">deploy_update</span>
+            <span class="tool-pill">get_disk_usage</span>
+          </div>
+          <div class="mcp-impact">Zéro SSH pour les opérations courantes. L'agent peut déployer une mise à jour complète (git pull → cargo build → restart) depuis une commande Telegram.</div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">08</span>
+          <span class="mcp-name">Jito Block Engine MCP</span>
+          <span class="mcp-priority p3">Priorité 3 · V3</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Jito Labs expose une gRPC API pour soumettre des bundles de transactions atomiques et monitorer leur statut. Un MCP wrapper en Rust ou Python permet au bot de soumettre des bundles et vérifier leur inclusion. Indispensable pour la V3 : sans Jito, tous les arbitrages significatifs sont front-run par les bots MEV qui lisent le mempool standard.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">sendBundle</span>
+            <span class="tool-pill">getBundleStatuses</span>
+            <span class="tool-pill">getTipAccounts</span>
+            <span class="tool-pill">getInflightBundleStatuses</span>
+          </div>
+          <div class="mcp-impact">Protection MEV complète. Exécution atomique garantie en un seul bloc ou zéro frais. Débloque les opportunités &gt;0.3% actuellement capturées à 100% par les bots professionnels.</div>
+        </div>
+      </div>
+
+      <div class="mcp-card">
+        <div class="mcp-card-header">
+          <span class="mcp-num">09</span>
+          <span class="mcp-name">PostgreSQL MCP (trades & analytics store)</span>
+          <span class="mcp-priority p3">Priorité 3 · V2–V3</span>
+        </div>
+        <div class="mcp-card-body">
+          <p class="mcp-desc">Wrapper MCP autour de la base PostgreSQL locale. Chaque trade est inséré avec tous ses attributs. L'agent IA peut requêter la base pour des analyses complexes : "quel est mon meilleur DEX les lundis matin", "quelles heures ont le plus fort spread moyen", "comparaison profit estimé vs profit réel par paire". Alimente aussi le dashboard web et le backtester.</p>
+          <div class="mcp-tools-label">Tools exposés</div>
+          <div class="mcp-tools">
+            <span class="tool-pill">query</span>
+            <span class="tool-pill">insert_trade</span>
+            <span class="tool-pill">get_stats_by_hour</span>
+            <span class="tool-pill">get_pnl_curve</span>
+            <span class="tool-pill">get_dex_performance</span>
+          </div>
+          <div class="mcp-impact">Transforme les logs en actif analytique structuré. Alimente le modèle ML V3, le backtester V4, et les requêtes ad-hoc de l'agent IA pour l'optimisation de stratégie.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="ai">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2>Modèles IA — Carte d'utilisation</h2>
+    </div>
+
+    <div class="ai-grid">
+
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-logo" style="background: rgba(20,241,149,0.1); color: var(--accent); border: 1px solid rgba(20,241,149,0.2);">C·H</div>
+          <span class="ai-name">Claude Haiku 3.5 — Anthropic</span>
+          <span class="ai-use-case">Analyse nocturne · Bilan auto</span>
+        </div>
+        <p class="ai-desc">Le choix optimal pour les tâches d'analyse de logs et de génération de rapports automatiques. Haiku est 10× moins cher que Sonnet, répond en moins d'une seconde, et gère parfaitement l'analyse structurée JSON → rapport français. Utilisé pour le bilan nocturne automatique envoyé sur Telegram. Entrée typique : 2000-5000 tokens de logs JSON. Sortie : rapport markdown 400-600 tokens.</p>
+        <div class="ai-strengths">
+          <span class="strength-pill">Analyse de logs JSON</span>
+          <span class="strength-pill">Génération rapports FR</span>
+          <span class="strength-pill">Coût &lt;0.001$/appel</span>
+          <span class="strength-pill">Latence &lt;1s</span>
+          <span class="strength-pill">Bilan nocturne automatique</span>
+        </div>
+      </div>
+
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-logo" style="background: rgba(153,69,255,0.1); color: var(--accent2); border: 1px solid rgba(153,69,255,0.2);">C·S</div>
+          <span class="ai-name">Claude Sonnet 4 — Anthropic</span>
+          <span class="ai-use-case">Supervision · Décisions complexes</span>
+        </div>
+        <p class="ai-desc">Modèle principal pour la supervision interactive via le MCP arb-control. Quand Nexus reçoit une commande complexe ("analyse les 3 derniers jours et recommande de nouveaux paramètres"), Sonnet effectue le raisonnement multi-étapes, enchaîne les appels MCP dans le bon ordre (get_recent_logs → get_session_stats → query PostgreSQL → set_param), et produit une recommandation argumentée. Utilisé à la demande, pas en boucle continue.</p>
+        <div class="ai-strengths">
+          <span class="strength-pill">Raisonnement multi-steps</span>
+          <span class="strength-pill">Orchestration MCP tools</span>
+          <span class="strength-pill">Instructions complexes</span>
+          <span class="strength-pill">Supervision interactive</span>
+          <span class="strength-pill">Analyse contextuelle profonde</span>
+        </div>
+      </div>
+
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-logo" style="background: rgba(56,189,248,0.1); color: var(--info); border: 1px solid rgba(56,189,248,0.2);">GPT</div>
+          <span class="ai-name">GPT-4o mini — OpenAI</span>
+          <span class="ai-use-case">Fallback · Classification rapide</span>
+        </div>
+        <p class="ai-desc">Alternative bas coût pour les tâches de classification simple : catégoriser les erreurs de transaction (slippage / liquidité / RPC / network), détecter les patterns anormaux dans les logs, tagger les types d'opportunités. Utilisé en fallback si l'API Anthropic est indisponible, ou pour des pipelines haute fréquence où même Haiku est trop lent pour le cas d'usage.</p>
+        <div class="ai-strengths">
+          <span class="strength-pill">Classification d'erreurs</span>
+          <span class="strength-pill">Fallback robuste</span>
+          <span class="strength-pill">Haute fréquence possible</span>
+          <span class="strength-pill">Coût minimal</span>
+        </div>
+      </div>
+
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-logo" style="background: rgba(240,192,64,0.1); color: var(--accent3); border: 1px solid rgba(240,192,64,0.2);">XGB</div>
+          <span class="ai-name">XGBoost / LightGBM — ML local</span>
+          <span class="ai-use-case">Scoring d'opportunités (V3)</span>
+        </div>
+        <p class="ai-desc">Pour la V3, entraîner un modèle ML tabulaire léger sur les données historiques de trades. Features principales : spread détecté (%), volume 5min du pool, heure UTC, jour de la semaine, congestion réseau (nb tx pending), volatilité 1h, TVL pool, historique du DEX. Cible : prédire si l'opportunité sera encore valide au moment de l'atterrissage de la transaction. Inférence en moins d'une milliseconde en Python — aucune latence ajoutée au hot path.</p>
+        <div class="ai-strengths">
+          <span class="strength-pill">Inférence &lt;1ms</span>
+          <span class="strength-pill">Zéro coût API</span>
+          <span class="strength-pill">Filtre faux positifs ~30-40%</span>
+          <span class="strength-pill">Entraînable sur données réelles</span>
+          <span class="strength-pill">Interprétable (SHAP)</span>
+        </div>
+      </div>
+
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-logo" style="background: rgba(255,107,74,0.1); color: var(--coral); border: 1px solid rgba(255,107,74,0.2);">QW</div>
+          <span class="ai-name">Qwen2.5:7b — Ollama local (VPS / GTX 1650)</span>
+          <span class="ai-use-case">Supervision offline · Tests prompts</span>
+        </div>
+        <p class="ai-desc">Modèle local déjà configuré sur ton infra (Ollama + GTX 1650, Tailscale GPU offload). Utilisé pour les tâches de supervision qui ne nécessitent pas d'appel API externe : analyser des logs en mode hors-ligne, tester les prompts du bilan nocturne avant déploiement, ou comme fallback local complet en cas de coupure réseau sur le VPS. Zéro coût, données qui ne sortent jamais du système.</p>
+        <div class="ai-strengths">
+          <span class="strength-pill">Zéro latence réseau</span>
+          <span class="strength-pill">Données privées (no cloud)</span>
+          <span class="strength-pill">Déjà configuré (Nexus)</span>
+          <span class="strength-pill">Fallback offline complet</span>
+          <span class="strength-pill">Test prompts gratuit</span>
+        </div>
+      </div>
+
+      <div class="ai-card">
+        <div class="ai-header">
+          <div class="ai-logo" style="background: rgba(20,241,149,0.08); color: #6ee7b7; border: 1px solid rgba(20,241,149,0.15);">MIS</div>
+          <span class="ai-name">Mistral Small — Fallback secondaire</span>
+          <span class="ai-use-case">Routage multi-provider (déjà dans Nexus)</span>
+        </div>
+        <p class="ai-desc">Mistral Small est déjà configuré dans le stack Nexus comme provider primaire avec Ollama en fallback. Réutiliser la même logique de routage multi-provider pour le bot : Haiku principal → Mistral fallback → Qwen2.5 fallback local. Assure une continuité de service même en cas de panne d'un provider. Coût comparable à Haiku pour les tâches de rapport.</p>
+        <div class="ai-strengths">
+          <span class="strength-pill">Déjà intégré dans Nexus</span>
+          <span class="strength-pill">Routage multi-provider</span>
+          <span class="strength-pill">Bon rapport qualité/coût</span>
+          <span class="strength-pill">Résilience du système</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="archi">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2>Architecture cible V3</h2>
+    </div>
+
+    <div class="archi-block"><span class="dim">┌──────────────────────────────────────────────────────────────────────────┐</span>
+<span class="dim">│</span>  <span class="b">AGENT LAYER</span>  (externe au VPS — Telegram / Claude.ai)                    <span class="dim">│</span>
+<span class="dim">│</span>                                                                            <span class="dim">│</span>
+<span class="dim">│</span>   <span class="g">Claude Sonnet 4</span>  ←→  <span class="p">arb-control MCP</span>  ←→  <span class="y">Telegram Bot MCP</span>             <span class="dim">│</span>
+<span class="dim">│</span>   Nexus / @AlaeddineAgent_bot                                              <span class="dim">│</span>
+<span class="dim">│</span>   Claude Haiku 3.5 (bilans auto 2h)                                        <span class="dim">│</span>
+<span class="dim">└──────────────────────────────┬─────────────────────────────────────────────┘</span>
+                               <span class="dim">│  MCP over stdio / SSE</span>
+<span class="dim">┌──────────────────────────────▼─────────────────────────────────────────────┐</span>
+<span class="dim">│</span>  <span class="b">VPS Hetzner 46.224.150.0</span>  ·  systemd arb-bot.service                     <span class="dim">│</span>
+<span class="dim">│</span>                                                                            <span class="dim">│</span>
+<span class="dim">│</span>   <span class="g">WebSocket Feeds</span> (latence ~50-200ms)                                      <span class="dim">│</span>
+<span class="dim">│</span>   Helius Geyser ─┐                                                         <span class="dim">│</span>
+<span class="dim">│</span>   Jupiter WS    ─┼──► <span class="g">price_fetcher.py</span>  (asyncio, multi-source)            <span class="dim">│</span>
+<span class="dim">│</span>   Raydium WS    ─┤                   │                                     <span class="dim">│</span>
+<span class="dim">│</span>   Meteora WS    ─┘                   ▼                                     <span class="dim">│</span>
+<span class="dim">│</span>                             <span class="g">arbitrage.py</span>  +  <span class="p">XGBoost scorer</span>               <span class="dim">│</span>
+<span class="dim">│</span>                             spread calc · adaptive thresholds              <span class="dim">│</span>
+<span class="dim">│</span>                             triangular pathfinding                         <span class="dim">│</span>
+<span class="dim">│</span>                                       │                                    <span class="dim">│</span>
+<span class="dim">│</span>              ┌────────────────────────┼─────────────────┐                  <span class="dim">│</span>
+<span class="dim">│</span>              ▼                        ▼                 ▼                  <span class="dim">│</span>
+<span class="dim">│</span>   <span class="p">Helius MCP</span>            <span class="p">Jupiter MCP</span>          <span class="y">Birdeye MCP</span>                 <span class="dim">│</span>
+<span class="dim">│</span>   getPriorityFee        swapSim · dynamicSlip  context marché             <span class="dim">│</span>
+<span class="dim">│</span>   simulateTx                     │                                         <span class="dim">│</span>
+<span class="dim">│</span>              └────────────────────┼─────────────────────┘                  <span class="dim">│</span>
+<span class="dim">│</span>                                   ▼                                        <span class="dim">│</span>
+<span class="dim">│</span>                      <span class="r">executor  (Rust binary)</span>   ◄──  <span class="p">Jito MCP</span>              <span class="dim">│</span>
+<span class="dim">│</span>                      swap · sign · send              sendBundle            <span class="dim">│</span>
+<span class="dim">│</span>                                   │                  MEV protection        <span class="dim">│</span>
+<span class="dim">│</span>              ┌────────────────────┼──────────────────────────────┐         <span class="dim">│</span>
+<span class="dim">│</span>              ▼                    ▼                              ▼         <span class="dim">│</span>
+<span class="dim">│</span>   <span class="g">PostgreSQL MCP</span>       <span class="y">Telegram MCP</span>             <span class="b">/health HTTP :8080</span>      <span class="dim">│</span>
+<span class="dim">│</span>   insert_trade          alerts · reports          UptimeRobot             <span class="dim">│</span>
+<span class="dim">│</span>   analytics queries     daily AI summary          external monitoring     <span class="dim">│</span>
+<span class="dim">│</span>                                                                            <span class="dim">│</span>
+<span class="dim">│</span>   <span class="p">arb-control MCP</span>  (écoute sur stdio / SSE)                               <span class="dim">│</span>
+<span class="dim">│</span>   ← exposé à l'agent externe pour supervision complète →                   <span class="dim">│</span>
+<span class="dim">└────────────────────────────────────────────────────────────────────────────┘</span>
+                                   │
+                        <span class="b">Solana Mainnet</span>
+                        Helius RPC · Jito Block Engine · DEX pools</div>
+  </section>
+
+  <section id="timeline">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2>Calendrier d'implémentation</h2>
+    </div>
+
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-week">SEMAINE 1</div>
+        <div class="tl-title">Priority fees dynamiques + simulation Helius</div>
+        <div class="tl-desc">Intégration Helius MCP dans executor_bridge.py. getPriorityFeeEstimate avant chaque swap. simulateTransaction en mode live. Taux d'atterrissage cible : &gt;90%. Tests en dry-run sur VPS, validation en live avec 0.05 SOL.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINE 2</div>
+        <div class="tl-title">Logging JSON structuré + CI GitHub Actions + health check</div>
+        <div class="tl-desc">Refactoring complet du logging. Pipeline CI : lint → pytest → cargo clippy → build. Endpoint /health sur port 8080. Monitoring UptimeRobot configuré. Backoff exponentiel sur appels RPC.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINE 3</div>
+        <div class="tl-title">Jupiter MCP + slippage dynamique</div>
+        <div class="tl-desc">Migration des appels httpx Jupiter vers le MCP officiel. Activation dynamicSlippage=true. Mesure de l'impact sur le profit net par trade. Comparaison before/after sur 100 trades dry-run.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINES 4–5</div>
+        <div class="tl-title">arb-control MCP + bilan IA nocturne Claude Haiku</div>
+        <div class="tl-desc">Construction du serveur MCP custom Python. Connexion à Nexus (@AlaeddineAgent_bot) via Tailscale. Premier bilan automatique Haiku à 2h du matin avec recommandations de paramètres. Validation du prompt sur 7 jours consécutifs.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINES 6–7</div>
+        <div class="tl-title">WebSocket feeds + seuils adaptatifs + PostgreSQL</div>
+        <div class="tl-desc">Migration du polling HTTP vers WebSocket Helius Geyser. Implémentation du score de volatilité glissant. Migration des logs vers PostgreSQL local. MCP query tool pour l'agent analytique.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINES 8–10</div>
+        <div class="tl-title">Jito bundles + paires supplémentaires (Meteora, Lifinity)</div>
+        <div class="tl-desc">Intégration Jito SDK dans le binaire Rust. Ajout Meteora DLMM et Lifinity comme sources de prix. Extension à 6-8 paires actives. Mesure empirique du front-running résiduel avant/après Jito.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINES 11–13</div>
+        <div class="tl-title">XGBoost scorer + dashboard web HTMX</div>
+        <div class="tl-desc">Collecte de 6-8 semaines de données de trades. Entraînement du premier modèle de scoring avec SHAP analysis. Dashboard Flask+HTMX sur port 3000 avec P&L temps réel et heatmap horaire.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-week">SEMAINES 14–24</div>
+        <div class="tl-title">Migration Rust pure + RPC dédié + backtesting + co-location</div>
+        <div class="tl-desc">Réécriture de price_fetcher et arbitrage en Rust (tokio). Upgrade Helius Business tier. Backtesting sur 3-6 mois de données Birdeye. Migration VPS vers Falkenstein si les benchmarks montrent un gain de latence significatif.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="risques">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2>Analyse de risques</h2>
+    </div>
+
+    <table class="risk-table">
+      <thead>
+        <tr>
+          <th>Risque</th>
+          <th>Sévérité</th>
+          <th>Mitigation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Perte de capital sur bug d'exécution Rust</strong><br><small style="color:var(--muted)">Envoi du mauvais montant, mauvaise paire, ou double-exécution</small></td>
+          <td><span class="risk-badge risk-high">Élevé</span></td>
+          <td>Kill switch à 0.05 SOL. Max par trade 0.05 SOL en V1. Simulation obligatoire avant tout envoi live. Tests unitaires Rust exhaustifs sur swap.rs. Dry-run de 72h avant chaque mise en production.</td>
+        </tr>
+        <tr>
+          <td><strong>Helius free tier rate limit</strong><br><small style="color:var(--muted)">30 req/s dépassé avec WebSocket + MCP + health checks</small></td>
+          <td><span class="risk-badge risk-med">Modéré</span></td>
+          <td>Backoff exponentiel sur toutes les requêtes. Circuit breaker Python (3 erreurs → pause 30s). Compteur de requêtes par minute dans le logging. Upgrade vers Helius Business si le taux d'erreur dépasse 5%.</td>
+        </tr>
+        <tr>
+          <td><strong>Front-running systématique en V1–V2</strong><br><small style="color:var(--muted)">Bots MEV pro capturant toutes les opportunités &gt;0.3%</small></td>
+          <td><span class="risk-badge risk-med">Modéré</span></td>
+          <td>Attendu et documenté en V1–V2. Priority fees dynamiques améliorent l'atterrissage mais ne protègent pas du front-run. Résolution complète uniquement avec Jito bundles (V3). Stratégie intermédiaire : cibler les spreads &lt;0.3% moins attractifs pour les MEV bots.</td>
+        </tr>
+        <tr>
+          <td><strong>Clé privée exposée via MCP ou logs</strong><br><small style="color:var(--muted)">Wallet.json accessible si le serveur MCP est mal sécurisé</small></td>
+          <td><span class="risk-badge risk-high">Élevé</span></td>
+          <td>Wallet jetable dédié, max 0.5 SOL à tout moment. Jamais la clé dans les logs JSON. arb-control MCP ne doit jamais exposer keypair_path. Audit de sécurité complet du serveur MCP avant connexion Nexus. Authentification mTLS sur le MCP server.</td>
+        </tr>
+        <tr>
+          <td><strong>Agent IA modifiant des paramètres dangereux</strong><br><small style="color:var(--muted)">Nexus baissant MIN_PROFIT_PCT à 0 ou montant max à 1 SOL</small></td>
+          <td><span class="risk-badge risk-med">Modéré</span></td>
+          <td>Whitelist des paramètres modifiables via MCP. Bounds validation côté serveur : MIN_PROFIT_PCT ∈ [0.05, 2.0], TRADE_AMOUNT_SOL ∈ [0.01, 0.1]. Confirmation humaine obligatoire (Telegram inline keyboard) pour tout changement &gt;50% d'une valeur existante.</td>
+        </tr>
+        <tr>
+          <td><strong>VPS crash / service arrêté sans alerte</strong><br><small style="color:var(--muted)">Capital inactif pendant des heures sans notification</small></td>
+          <td><span class="risk-badge risk-low">Faible</span></td>
+          <td>Restart=on-failure déjà configuré. UptimeRobot sur /health (check toutes les 5 min). Alerte Telegram si /health ne répond pas en 5 min. Alert critique si balance SOL n'évolue pas en 12h en mode live.</td>
+        </tr>
+        <tr>
+          <td><strong>Liquidité insuffisante sur pools trop minces</strong><br><small style="color:var(--muted)">Impact de prix élevé sur les 0.05-0.1 SOL tradés</small></td>
+          <td><span class="risk-badge risk-low">Faible</span></td>
+          <td>Filtrer les pools avec TVL &lt;500k$ via Birdeye MCP. dynamicSlippage Jupiter protège automatiquement. Le capital initial (0.35 SOL) est trop petit pour impacter significativement les gros pools SOL/USDC (&gt;50M$ TVL).</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<div class="footer">
+  <span class="accent">Solana Arb Bot</span> — Roadmap v1.0 — Mars 2026
+  <span>Alaeddine Ben Rhouma · cyranoaladin</span>
+</div>
+
+</body>
+</html>

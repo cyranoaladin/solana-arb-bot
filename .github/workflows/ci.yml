@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r detector/requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+      - name: Lint check (py_compile)
+        run: >
+          python -m py_compile detector/config.py
+          detector/main.py
+          detector/price_fetcher.py
+          detector/arbitrage.py
+          detector/executor_bridge.py
+          detector/notifier.py
+          detector/helius.py
+          detector/circuit_breaker.py
+          detector/health.py
+
+  rust-checks:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: executor/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cargo check
+        run: cargo check
+
+      - name: Cargo clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Cargo build release
+        run: cargo build --release

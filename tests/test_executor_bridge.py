@@ -58,7 +58,7 @@ async def test_swap_dry_run(bridge):
 
 @pytest.mark.asyncio
 async def test_get_balance_returns_float(bridge):
-    fake_output = json.dumps({"balance": 1.234})
+    fake_output = json.dumps({"balance_sol": 1.234})
     mock_proc = AsyncMock()
     mock_proc.communicate.return_value = (fake_output.encode(), b"")
     mock_proc.returncode = 0

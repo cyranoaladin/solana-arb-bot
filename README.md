@@ -1,13 +1,14 @@
 # Solana Arbitrage Bot
 
-Automated SOL/USDC arbitrage detector and executor across Jupiter DEX routes on Solana.
+Automated SOL/USDC and SOL/USDT arbitrage detector and executor across Orca and Raydium DEXes on Solana.
 
 ## Architecture
 
 ```
 +------------------+       +------------------+       +------------------+
 |  Price Fetcher   | ----> | Arbitrage Detect | ----> | Rust Executor    |
-|  (Jupiter API)   |       | (spread calc)    |       | (swap + confirm) |
+| Orca (pools API) |       | (spread calc,    |       | Raydium swap API |
+| Raydium (compute)|       |  tx fee deduct)  |       | sign + send tx   |
 +------------------+       +------------------+       +------------------+
          |                          |                          |
          v                          v                          v
@@ -17,8 +18,17 @@ Automated SOL/USDC arbitrage detector and executor across Jupiter DEX routes on 
 +---------------------------------------------------------------+
 ```
 
-- **detector/** -- Python: price fetching, spread detection, main loop, Telegram alerts
-- **executor/** -- Rust: on-chain swap execution via Solana RPC
+- **detector/** -- Python: price fetching (Orca + Raydium), spread detection, main loop, Telegram alerts
+- **executor/** -- Rust: on-chain swap execution via Raydium swap API + Solana RPC
+
+### How it works
+
+1. Every 3 seconds, fetches SOL/USDC and SOL/USDT prices from **Orca Whirlpool** (pool price) and **Raydium** (compute/swap API)
+2. Compares prices across DEXes. If spread > `MIN_PROFIT_PCT` (after tx fees), triggers arbitrage
+3. **Leg 1**: Swaps SOL→USDC via Raydium API (gets serialized tx, signs, sends)
+4. **Leg 2**: Swaps USDC→SOL back via Raydium API (captures the spread)
+5. Sends Telegram notification with trade details and Solscan link
+6. Kill switch stops trading if balance drops below threshold
 
 ## Setup
 
@@ -33,6 +43,9 @@ pip3 install -r detector/requirements.txt
 
 # Build Rust executor
 cd executor && cargo build --release && cd ..
+
+# Run in dry-run mode (default)
+python -m detector.main
 ```
 
 ## Deploy to VPS
@@ -74,3 +87,17 @@ sudo systemctl status arb-bot
 | `DRY_RUN`           | Simulate trades without executing  | `true`         |
 | `POLL_INTERVAL_SEC` | Seconds between price checks       | `3`            |
 | `EXECUTOR_PATH`     | Path to Rust executor binary       | `./executor/target/release/executor` |
+
+## Going to production
+
+1. Fund the wallet with SOL (check address with `./executor/target/release/executor pubkey --keypair-path ./wallet.json`)
+2. Set `DRY_RUN=false` in `.env`
+3. Start with a small `TRADE_AMOUNT_SOL` (e.g., 0.01)
+4. Monitor via Telegram and logs
+5. Increase trade amount gradually once confident
+
+## Tests
+
+```bash
+python -m pytest tests/ -v
+```

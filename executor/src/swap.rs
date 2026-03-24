@@ -1,8 +1,12 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::{json, Value};
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_config::RpcSendTransactionConfig;
+use solana_sdk::commitment_config::CommitmentConfig;
 use solana_sdk::signature::read_keypair_file;
 use solana_sdk::signer::Signer;
+use solana_sdk::transaction::VersionedTransaction;
 
 /// Reads the keypair from file, connects to the given RPC URL,
 /// and returns the SOL balance in SOL (not lamports).
@@ -16,24 +20,213 @@ pub fn get_balance(rpc_url: &str, keypair_path: &str) -> Result<f64> {
     Ok(sol)
 }
 
-/// Placeholder swap execution. Returns a JSON object with status "ok"
-/// and a placeholder tx_hash. Real implementation will come later.
+/// Returns the base58-encoded public key for the given keypair file.
+pub fn get_pubkey(keypair_path: &str) -> Result<String> {
+    let keypair = read_keypair_file(keypair_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read keypair: {}", e))?;
+    Ok(keypair.pubkey().to_string())
+}
+
+/// Sign a base64-encoded VersionedTransaction and send it to the network.
+/// Returns the transaction signature as a string.
+pub fn sign_and_send_tx(tx_base64: &str, rpc_url: &str, keypair_path: &str) -> Result<Value> {
+    let keypair = read_keypair_file(keypair_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read keypair: {}", e))?;
+
+    let tx_bytes = BASE64
+        .decode(tx_base64)
+        .context("Failed to decode base64 transaction")?;
+
+    let mut tx: VersionedTransaction =
+        bincode::deserialize(&tx_bytes).context("Failed to deserialize transaction")?;
+
+    // Sign the transaction: replace the first signature (fee payer) with ours
+    let message_bytes = tx.message.serialize();
+    let signature = keypair.sign_message(&message_bytes);
+    if tx.signatures.is_empty() {
+        tx.signatures.push(signature);
+    } else {
+        tx.signatures[0] = signature;
+    }
+
+    let client = RpcClient::new_with_commitment(
+        rpc_url.to_string(),
+        CommitmentConfig::confirmed(),
+    );
+
+    let send_config = RpcSendTransactionConfig {
+        skip_preflight: false,
+        ..Default::default()
+    };
+
+    let sig = client
+        .send_transaction_with_config(&tx, send_config)
+        .context("Failed to send transaction")?;
+
+    Ok(json!({
+        "status": "ok",
+        "tx_hash": sig.to_string()
+    }))
+}
+
+/// Execute a swap via DEX API. Fetches a swap transaction from the DEX,
+/// signs it, and sends it to the network.
 pub fn execute_swap(
     from: &str,
     to: &str,
     amount: f64,
     dex: &str,
     min_out: f64,
-    _rpc_url: &str,
-    _keypair_path: &str,
+    rpc_url: &str,
+    keypair_path: &str,
+    priority_fee: u64,
 ) -> Result<Value> {
+    let keypair = read_keypair_file(keypair_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read keypair: {}", e))?;
+    let wallet_pubkey = keypair.pubkey().to_string();
+
+    match dex {
+        "raydium" => execute_raydium_swap(from, to, amount, min_out, rpc_url, keypair_path, &wallet_pubkey, priority_fee),
+        "orca" => execute_orca_swap(from, to, amount, min_out, rpc_url, keypair_path, &wallet_pubkey),
+        _ => anyhow::bail!("Unsupported DEX: {}", dex),
+    }
+}
+
+fn get_mint(token: &str) -> Result<&'static str> {
+    match token {
+        "SOL" => Ok("So11111111111111111111111111111111111111112"),
+        "USDC" => Ok("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+        "USDT" => Ok("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"),
+        _ => anyhow::bail!("Unknown token: {}", token),
+    }
+}
+
+fn get_decimals(token: &str) -> Result<u32> {
+    match token {
+        "SOL" => Ok(9),
+        "USDC" => Ok(6),
+        "USDT" => Ok(6),
+        _ => anyhow::bail!("Unknown token: {}", token),
+    }
+}
+
+fn execute_raydium_swap(
+    from: &str,
+    to: &str,
+    amount: f64,
+    _min_out: f64,
+    rpc_url: &str,
+    keypair_path: &str,
+    wallet_pubkey: &str,
+    priority_fee: u64,
+) -> Result<Value> {
+    let input_mint = get_mint(from)?;
+    let output_mint = get_mint(to)?;
+    let input_decimals = get_decimals(from)?;
+    let amount_raw = (amount * 10f64.powi(input_decimals as i32)) as u64;
+    let slippage_bps = 50u64; // 0.5% default
+
+    let http = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    // Step 1: Compute swap route via Raydium API
+    let compute_url = format!(
+        "https://transaction-v1.raydium.io/compute/swap-base-in?inputMint={}&outputMint={}&amount={}&slippageBps={}&txVersion=V0",
+        input_mint, output_mint, amount_raw, slippage_bps
+    );
+
+    let compute_resp: Value = http
+        .get(&compute_url)
+        .send()
+        .context("Failed to call Raydium compute API")?
+        .json()
+        .context("Failed to parse Raydium compute response")?;
+
+    if !compute_resp.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let msg = compute_resp
+            .get("msg")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown error");
+        anyhow::bail!("Raydium compute failed: {}", msg);
+    }
+
+    let compute_data = compute_resp
+        .get("data")
+        .ok_or_else(|| anyhow::anyhow!("No data in Raydium compute response"))?;
+
+    // Step 2: Build swap transaction (with priority fee for faster inclusion)
+    let tx_body = json!({
+        "swapResponse": compute_data,
+        "wallet": wallet_pubkey,
+        "wrapSol": from == "SOL",
+        "unwrapSol": to == "SOL",
+        "txVersion": "V0",
+        "computeUnitPriceMicroLamports": priority_fee.to_string()
+    });
+
+    let tx_resp: Value = http
+        .post("https://transaction-v1.raydium.io/transaction/swap-base-in")
+        .json(&tx_body)
+        .send()
+        .context("Failed to call Raydium transaction API")?
+        .json()
+        .context("Failed to parse Raydium transaction response")?;
+
+    if !tx_resp.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let msg = tx_resp
+            .get("msg")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown error");
+        anyhow::bail!("Raydium transaction build failed: {}", msg);
+    }
+
+    // The response contains an array of base64-encoded transactions
+    let transactions = tx_resp
+        .get("data")
+        .and_then(|d| d.as_array())
+        .ok_or_else(|| anyhow::anyhow!("No transaction data in Raydium response"))?;
+
+    if transactions.is_empty() {
+        anyhow::bail!("Raydium returned no transactions");
+    }
+
+    // Sign and send each transaction (usually just one for a simple swap)
+    let mut last_sig = String::new();
+    for tx_val in transactions {
+        let tx_b64 = tx_val
+            .get("transaction")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing transaction field in Raydium response"))?;
+
+        let result = sign_and_send_tx(tx_b64, rpc_url, keypair_path)?;
+        last_sig = result["tx_hash"].as_str().unwrap_or("").to_string();
+    }
+
     Ok(json!({
         "status": "ok",
-        "tx_hash": "PLACEHOLDER_TX_HASH",
+        "tx_hash": last_sig,
+        "dex": "raydium",
         "from": from,
         "to": to,
-        "amount": amount,
-        "dex": dex,
-        "min_out": min_out
+        "amount": amount
     }))
+}
+
+fn execute_orca_swap(
+    _from: &str,
+    _to: &str,
+    _amount: f64,
+    _min_out: f64,
+    _rpc_url: &str,
+    _keypair_path: &str,
+    _wallet_pubkey: &str,
+) -> Result<Value> {
+    // Orca does not expose an HTTP swap API.
+    // Swaps require the TypeScript Whirlpool SDK or raw instruction building.
+    // For now, route all execution through Raydium.
+    anyhow::bail!(
+        "Orca swap execution not available — Orca has no HTTP swap API. \
+         Use Raydium for execution (Orca used for price discovery only)."
+    )
 }

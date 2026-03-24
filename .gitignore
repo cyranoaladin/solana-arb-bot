@@ -1,7 +1,13 @@
 .env
+wallet.json
 __pycache__/
 *.pyc
 target/
 executor/target/
 *.log
 .venv/
+.coverage
+.hypothesis/
+.pytest_cache/
+models/*.pkl
+docs/mobula-monorepo/

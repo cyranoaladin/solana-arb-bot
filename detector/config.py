@@ -24,6 +24,8 @@ class BotConfig:
     dry_run: bool = field(default_factory=lambda: os.getenv("DRY_RUN", "true").lower() in ("true", "1", "yes"))
     poll_interval_sec: int = field(default_factory=lambda: int(os.getenv("POLL_INTERVAL_SEC", "3")))
     executor_path: str = field(default_factory=lambda: os.getenv("EXECUTOR_PATH", "./executor/target/release/executor"))
+    anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    log_path: str = field(default_factory=lambda: os.getenv("LOG_PATH", "/var/log/arb-bot/bot.log"))
 
     def __post_init__(self) -> None:
         if self.trade_amount_sol < 0:
