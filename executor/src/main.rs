@@ -150,8 +150,6 @@ fn run_loop(
         .build()?;
 
     let pairs = [("SOL", "USDC"), ("SOL", "USDT")];
-    let mut total_trades = 0u64;
-    let mut total_profit = 0.0f64;
 
     eprintln!("Rust bot started — dry_run={}, poll={}s, amount={}", dry_run, poll_interval_sec, amount);
 
@@ -194,8 +192,7 @@ fn run_loop(
                         }
                     }
 
-                    total_trades += 1;
-                    total_profit += opp.estimated_profit;
+                    eprintln!("  trade profit: {:.6}", opp.estimated_profit);
                 }
             }
         }

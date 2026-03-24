@@ -69,8 +69,22 @@ pub fn sign_and_send_tx(tx_base64: &str, rpc_url: &str, keypair_path: &str) -> R
     }))
 }
 
+/// Parameters for a swap execution (for future refactoring).
+#[allow(dead_code)]
+pub struct SwapParams<'a> {
+    pub from: &'a str,
+    pub to: &'a str,
+    pub amount: f64,
+    pub dex: &'a str,
+    pub min_out: f64,
+    pub rpc_url: &'a str,
+    pub keypair_path: &'a str,
+    pub priority_fee: u64,
+}
+
 /// Execute a swap via DEX API. Fetches a swap transaction from the DEX,
 /// signs it, and sends it to the network.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_swap(
     from: &str,
     to: &str,
@@ -110,6 +124,7 @@ fn get_decimals(token: &str) -> Result<u32> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_raydium_swap(
     from: &str,
     to: &str,

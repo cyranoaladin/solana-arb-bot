@@ -120,6 +120,7 @@ pub fn send_bundle(
 }
 
 /// Check the status of a previously submitted Jito bundle.
+#[allow(dead_code)]
 pub fn get_bundle_status(bundle_id: &str) -> Result<Value> {
     let request = json!({
         "jsonrpc": "2.0",
