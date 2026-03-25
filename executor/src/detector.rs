@@ -243,3 +243,113 @@ pub fn find_opportunities(
     opportunities.sort_by(|a, b| b.profit_pct.partial_cmp(&a.profit_pct).unwrap());
     opportunities
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_quote(dex: &str, price: f64) -> PriceQuote {
+        PriceQuote {
+            dex: dex.to_string(),
+            input_token: "SOL".to_string(),
+            output_token: "USDC".to_string(),
+            input_amount: 0.05,
+            output_amount: 0.05 * price,
+            price,
+        }
+    }
+
+    #[test]
+    fn test_token_info_sol() {
+        let info = token_info("SOL").unwrap();
+        assert_eq!(info.decimals, 9);
+        assert!(info.mint.starts_with("So1"));
+    }
+
+    #[test]
+    fn test_token_info_usdc() {
+        let info = token_info("USDC").unwrap();
+        assert_eq!(info.decimals, 6);
+    }
+
+    #[test]
+    fn test_token_info_unknown() {
+        assert!(token_info("UNKNOWN").is_none());
+    }
+
+    #[test]
+    fn test_find_opportunities_empty() {
+        let quotes: Vec<PriceQuote> = vec![];
+        let opps = find_opportunities(&quotes, 0.1, 0.0001);
+        assert!(opps.is_empty());
+    }
+
+    #[test]
+    fn test_find_opportunities_single_quote() {
+        let quotes = vec![make_quote("orca", 90.0)];
+        let opps = find_opportunities(&quotes, 0.1, 0.0001);
+        assert!(opps.is_empty());
+    }
+
+    #[test]
+    fn test_find_opportunities_no_spread() {
+        let quotes = vec![make_quote("orca", 90.0), make_quote("raydium", 90.0)];
+        let opps = find_opportunities(&quotes, 0.1, 0.0001);
+        assert!(opps.is_empty());
+    }
+
+    #[test]
+    fn test_find_opportunities_profitable() {
+        let quotes = vec![make_quote("orca", 90.0), make_quote("raydium", 92.0)];
+        let opps = find_opportunities(&quotes, 0.1, 0.0001);
+        assert!(!opps.is_empty());
+        assert!(opps[0].profit_pct > 0.0);
+        assert_eq!(opps[0].pair, "SOL/USDC");
+    }
+
+    #[test]
+    fn test_find_opportunities_sorted_by_profit() {
+        let quotes = vec![
+            make_quote("orca", 90.0),
+            make_quote("raydium", 91.0),
+            make_quote("meteora", 93.0),
+        ];
+        let opps = find_opportunities(&quotes, 0.1, 0.0001);
+        if opps.len() >= 2 {
+            assert!(opps[0].profit_pct >= opps[1].profit_pct);
+        }
+    }
+
+    #[test]
+    fn test_find_opportunities_fees_filter() {
+        // Tiny spread that should be eaten by fees
+        let quotes = vec![make_quote("orca", 90.0), make_quote("raydium", 90.001)];
+        let opps = find_opportunities(&quotes, 0.1, 0.0001);
+        assert!(opps.is_empty()); // spread too small after fees
+    }
+
+    #[test]
+    fn test_quote_serialization() {
+        let q = make_quote("orca", 90.0);
+        let json = serde_json::to_string(&q).unwrap();
+        assert!(json.contains("orca"));
+        assert!(json.contains("SOL"));
+    }
+
+    #[test]
+    fn test_opportunity_serialization() {
+        let opp = Opportunity {
+            pair: "SOL/USDC".to_string(),
+            buy_dex: "orca".to_string(),
+            sell_dex: "raydium".to_string(),
+            buy_price: 4.5,
+            sell_price: 4.6,
+            amount: 0.05,
+            profit_pct: 2.2,
+            estimated_profit: 0.1,
+        };
+        let json = serde_json::to_string(&opp).unwrap();
+        assert!(json.contains("SOL/USDC"));
+        assert!(json.contains("2.2"));
+    }
+}

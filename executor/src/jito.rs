@@ -143,3 +143,31 @@ pub fn get_bundle_status(bundle_id: &str) -> Result<Value> {
 
     Ok(resp)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tip_accounts_count() {
+        assert_eq!(TIP_ACCOUNTS.len(), 8);
+    }
+
+    #[test]
+    fn test_tip_accounts_valid_pubkeys() {
+        for account in TIP_ACCOUNTS {
+            // Each should be a valid base58 string of ~44 chars
+            assert!(
+                account.len() >= 32 && account.len() <= 44,
+                "Invalid tip account length: {}",
+                account
+            );
+        }
+    }
+
+    #[test]
+    fn test_jito_bundle_url() {
+        assert!(JITO_BUNDLE_URL.contains("jito.wtf"));
+        assert!(JITO_BUNDLE_URL.starts_with("https://"));
+    }
+}

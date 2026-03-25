@@ -245,3 +245,36 @@ fn execute_orca_swap(
          Use Raydium for execution (Orca used for price discovery only)."
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_mint_sol() {
+        assert_eq!(get_mint("SOL").unwrap(), "So11111111111111111111111111111111111111112");
+    }
+
+    #[test]
+    fn test_get_mint_usdc() {
+        assert_eq!(get_mint("USDC").unwrap(), "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    }
+
+    #[test]
+    fn test_get_mint_usdt() {
+        assert_eq!(get_mint("USDT").unwrap(), "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB");
+    }
+
+    #[test]
+    fn test_get_mint_unknown() {
+        assert!(get_mint("DOGE").is_err());
+    }
+
+    #[test]
+    fn test_get_decimals() {
+        assert_eq!(get_decimals("SOL").unwrap(), 9);
+        assert_eq!(get_decimals("USDC").unwrap(), 6);
+        assert_eq!(get_decimals("USDT").unwrap(), 6);
+        assert!(get_decimals("UNKNOWN").is_err());
+    }
+}
