@@ -10,9 +10,23 @@ from flask import Flask, Response, render_template_string, request
 import httpx
 
 app = Flask(__name__)
-DASH_USER = os.getenv("DASHBOARD_USER", "admin")
-DASH_PASS = os.getenv("DASHBOARD_PASS", "admin")
-BOT_HEALTH_URL = "http://localhost:8080/health"
+DASH_USER = os.getenv("DASHBOARD_USER", "")
+DASH_PASS = os.getenv("DASHBOARD_PASS", "")
+DASH_HOST = os.getenv("DASHBOARD_BIND_HOST", "127.0.0.1")
+BOT_HEALTH_URL = "http://127.0.0.1:8080/health"
+
+# Block startup if credentials are weak or missing (skip during testing)
+_WEAK_PASSWORDS = {"admin", "password", "123456", "arbbot", "changeme", ""}
+_TESTING = os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TESTING", "") == "true"
+if not _TESTING and (DASH_PASS in _WEAK_PASSWORDS or DASH_USER == ""):
+    import sys
+    print(
+        "FATAL: Dashboard credentials are weak or missing.\n"
+        "Set DASHBOARD_USER and DASHBOARD_PASS to strong values in .env.\n"
+        "Refusing to start with default/weak credentials.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def check_auth(username: str, password: str) -> bool:
@@ -259,4 +273,4 @@ es.onmessage=e=>{
 """
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000)
+    app.run(host=DASH_HOST, port=3000)

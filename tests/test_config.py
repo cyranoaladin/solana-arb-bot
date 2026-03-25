@@ -24,7 +24,7 @@ def test_config_rejects_negative_trade_amount():
 
 def test_config_rejects_empty_rpc_url():
     """BotConfig should raise ValueError when rpc_url is empty."""
-    with pytest.raises(ValueError, match="rpc_url"):
+    with pytest.raises(ValueError, match="RPC_URL"):
         BotConfig(rpc_url="")
 
 

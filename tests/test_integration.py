@@ -248,7 +248,7 @@ class TestFullPipeline:
         profits = [0.001, 0.002, -0.0005, 0.003]
         for p in profits:
             stats.trades_total += 1
-            stats.profit_total += p
+            stats.estimated_profit_total += p
             stats.record_trade(p)
 
         stats.opportunities_seen = 15
@@ -256,7 +256,7 @@ class TestFullPipeline:
 
         d = stats.to_dict()
         assert d["trades_total"] == 4
-        assert d["profit_total"] == pytest.approx(sum(profits), abs=1e-9)
+        assert d["estimated_profit_total"] == pytest.approx(sum(profits), abs=1e-9)
         assert d["balance_sol"] == 10.0
         assert d["opportunities_seen"] == 15
         assert d["errors_total"] == 2
@@ -265,8 +265,8 @@ class TestFullPipeline:
 
         # PnL curve entries
         assert len(stats.pnl_curve) == 4
-        assert stats.pnl_curve[0]["profit"] == 0.001
-        assert stats.pnl_curve[-1]["profit"] == 0.003
+        assert stats.pnl_curve[0]["estimated_profit"] == 0.001
+        assert stats.pnl_curve[-1]["estimated_profit"] == 0.003
 
     def test_weighted_mean_favors_high_liquidity(self):
         """Weighted mean is closer to the high-liquidity DEX price."""

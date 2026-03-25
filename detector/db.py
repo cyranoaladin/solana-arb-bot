@@ -9,7 +9,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://arbbot:arbbot123@localhost:5432/arbbot")
+DATABASE_URL = os.getenv("DATABASE_URL", "")  # No weak default — must be explicitly configured
 
 # Schema
 CREATE_TABLES_SQL = """

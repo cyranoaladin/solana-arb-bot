@@ -76,7 +76,21 @@ async def run_bot() -> None:
     setup_logging()
 
     config = BotConfig()
-    logger.info("Bot config loaded — dry_run=%s, poll=%ds", config.dry_run, config.poll_interval_sec)
+
+    # --- SAFETY GATES ---
+    execution_mode = "dry_run"
+    live_block_reason = config.live_block_reason
+    if config.live_execution_allowed:
+        execution_mode = "live_raydium_only"
+        live_block_reason = ""
+        logger.warning("LIVE TRADING ENABLED — execution_mode=%s", execution_mode)
+    else:
+        logger.info("Live trading BLOCKED: %s", live_block_reason)
+
+    logger.info(
+        "Bot config loaded — dry_run=%s, trading_enabled=%s, execution_mode=%s, poll=%ds",
+        config.dry_run, config.trading_enabled, execution_mode, config.poll_interval_sec,
+    )
 
     fetcher = PriceFetcher(rpc_url=config.rpc_url)
     detector = ArbitrageDetector(min_profit_pct=config.min_profit_pct)
@@ -106,7 +120,12 @@ async def run_bot() -> None:
     cb_rpc = CircuitBreaker("rpc", failure_threshold=5, cooldown_sec=60)
 
     # Shared state for health endpoint
-    stats = BotStats(dry_run=config.dry_run)
+    stats = BotStats(
+        dry_run=config.dry_run,
+        live_enabled=config.live_execution_allowed,
+        live_block_reason=live_block_reason,
+        execution_mode=execution_mode,
+    )
 
     # Smart trader analytics
     trader_stats = TraderStats()
@@ -115,7 +134,7 @@ async def run_bot() -> None:
     opp_ranker = OpportunityRanker(max_size=100, ttl_sec=60.0)
 
     # Start health check server
-    health_server = await start_health_server(stats)
+    health_server = await start_health_server(stats, host=config.health_bind_host)
 
     # Register bot state for MCP server access
     set_bot_state(stats=stats, config=config, detector=detector,
@@ -154,11 +173,20 @@ async def run_bot() -> None:
                 await asyncio.sleep(config.poll_interval_sec)
                 continue
 
-            if balance < config.kill_switch_sol and not config.dry_run:
+            if balance < config.kill_switch_sol and config.live_execution_allowed:
                 msg = f"Kill switch triggered: balance {balance:.4f} SOL < {config.kill_switch_sol} SOL"
                 logger.warning(msg)
                 await notifier.alert(msg)
                 break
+
+            # --- Pre-trade balance check ---
+            if config.live_execution_allowed and balance < config.trade_amount_sol:
+                logger.warning(
+                    "Insufficient balance for trading: %.6f SOL < %.6f required",
+                    balance, config.trade_amount_sol,
+                )
+                await asyncio.sleep(config.poll_interval_sec)
+                continue
 
             # --- Get dynamic priority fee ---
             priority_fee = await helius.get_priority_fee()

@@ -27,7 +27,12 @@ class ExecutorBridge:
             return {"status": "error", "message": str(exc)}
 
     async def _run(self, args: list[str]) -> dict:
-        """Run the executor binary with the given args and return parsed JSON."""
+        """Run the executor binary with the given args and return parsed JSON.
+
+        Rust executor convention:
+        - stdout = structured JSON result
+        - stderr = structured JSON error (on non-zero exit) or debug logs
+        """
         try:
             proc = await asyncio.create_subprocess_exec(
                 *args,
@@ -36,10 +41,23 @@ class ExecutorBridge:
             )
             stdout, stderr = await proc.communicate()
 
-            if stderr:
-                logger.warning("Executor stderr: %s", stderr.decode().strip())
+            stdout_text = stdout.decode().strip() if stdout else ""
+            stderr_text = stderr.decode().strip() if stderr else ""
 
-            return self._parse_response(stdout.decode().strip())
+            # Non-zero exit: Rust writes JSON error to stderr
+            if proc.returncode != 0:
+                logger.error("Executor exited with code %d: %s", proc.returncode, stderr_text[:500])
+                # Try to parse stderr as JSON error from Rust
+                try:
+                    error_json = json.loads(stderr_text)
+                    return error_json  # {"status": "error", "message": "..."}
+                except (json.JSONDecodeError, TypeError):
+                    return {"status": "error", "message": stderr_text[:500] or "executor non-zero exit"}
+
+            if stderr_text:
+                logger.debug("Executor stderr: %s", stderr_text[:300])
+
+            return self._parse_response(stdout_text)
         except Exception as exc:
             logger.error("Executor command failed: %s", exc)
             return {"status": "error", "message": str(exc)}

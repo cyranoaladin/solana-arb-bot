@@ -160,19 +160,19 @@ async def test_mcp_get_pnl_curve_empty() -> None:
 @pytest.mark.asyncio
 async def test_mcp_get_pnl_curve_with_data() -> None:
     stats = _stats()
-    stats.profit_total = 0.0001
+    stats.estimated_profit_total = 0.0001
     stats.record_trade(0.0001)
-    stats.profit_total = 0.0003
+    stats.estimated_profit_total = 0.0003
     stats.record_trade(0.0002)
-    stats.profit_total = 0.0006
+    stats.estimated_profit_total = 0.0006
     stats.record_trade(0.0003)
 
     result = await _dispatch("get_pnl_curve", {})
     assert result["count"] == 3
     assert len(result["pnl_curve"]) == 3
     assert "ts" in result["pnl_curve"][0]
-    assert "profit" in result["pnl_curve"][0]
-    assert "cumulative" in result["pnl_curve"][0]
+    assert "estimated_profit" in result["pnl_curve"][0]
+    assert "cumulative_estimated" in result["pnl_curve"][0]
 
 
 # ---------- 15. test_mcp_get_opportunities ----------

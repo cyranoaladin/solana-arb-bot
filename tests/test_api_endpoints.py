@@ -47,7 +47,7 @@ async def test_health_server_responds(stats: BotStats) -> None:
         assert "dry_run" in result
         assert "balance_sol" in result
         assert "trades_total" in result
-        assert "profit_total" in result
+        assert "estimated_profit_total" in result
         assert "opportunities_seen" in result
         assert "errors_total" in result
         assert "last_scan_sec_ago" in result
@@ -92,13 +92,13 @@ async def test_health_returns_correct_uptime(stats: BotStats) -> None:
 @pytest.mark.asyncio
 async def test_health_returns_trade_data(stats: BotStats) -> None:
     stats.trades_total = 5
-    stats.profit_total = 0.001
+    stats.estimated_profit_total = 0.001
     port = _free_port()
     server = await start_health_server(stats, port=port)
     try:
         result = await _http_get(port)
         assert result["trades_total"] == 5
-        assert result["profit_total"] == 0.001
+        assert result["estimated_profit_total"] == 0.001
     finally:
         server.close()
         await server.wait_closed()
