@@ -102,11 +102,23 @@ def run_backtest(
     trade_amount: float = 0.05,
     fee_per_trade_sol: float = 0.00015,
     use_adaptive_thresholds: bool = True,
+    simulated_slippage_pct: float = 0.15,
+    simulated_mev_pct: float = 0.05,
 ) -> BacktestResult:
     """Run a backtest on historical price data.
 
     Groups price rows by timestamp, then runs the arbitrage detector on each group.
+
+    simulated_slippage_pct: average slippage per leg (0.15% default)
+    simulated_mev_pct: average MEV extraction per trade (0.05% default)
+
+    NOTE: Real-world results will likely be WORSE than backtest results.
+    This simulation adds random slippage and MEV but cannot model:
+    - Network latency between detection and execution
+    - Price movement during block confirmation
+    - Adversarial MEV strategies (sandwich attacks)
     """
+    import random
     detector = ArbitrageDetector(min_profit_pct=min_profit_pct)
     vol_tracker = VolatilityTracker() if use_adaptive_thresholds else None
     result = BacktestResult()
@@ -148,6 +160,11 @@ def run_backtest(
             except (ValueError, AttributeError):
                 hour = 0
 
+            # Apply simulated slippage + MEV (realistic estimate)
+            slippage_cost = opp.estimated_profit * random.uniform(0, simulated_slippage_pct * 2) / 100
+            mev_cost = opp.estimated_profit * random.uniform(0, simulated_mev_pct * 2) / 100
+            realized_profit = opp.estimated_profit - slippage_cost - mev_cost
+
             trade = BacktestTrade(
                 timestamp=ts,
                 pair=opp.pair,
@@ -160,11 +177,11 @@ def run_backtest(
             )
             result.trades.append(trade)
             result.total_trades += 1
-            result.total_profit += opp.estimated_profit
+            result.total_profit += realized_profit
             result.total_fees += trade.fees
-            result.hourly_profit[hour] = result.hourly_profit.get(hour, 0) + opp.estimated_profit
+            result.hourly_profit[hour] = result.hourly_profit.get(hour, 0) + realized_profit
 
-            cumulative_profit += opp.estimated_profit - trade.fees
+            cumulative_profit += realized_profit - trade.fees
             peak_profit = max(peak_profit, cumulative_profit)
             drawdown = peak_profit - cumulative_profit
             result.max_drawdown = max(result.max_drawdown, drawdown)

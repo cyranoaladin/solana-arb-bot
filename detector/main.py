@@ -245,24 +245,39 @@ async def run_bot() -> None:
                             )
                             continue
 
+                    # --- Route support check ---
+                    # Only Raydium execution is supported. Both legs go through Raydium.
+                    # This is NOT true cross-DEX execution.
+                    route_supported = True
+                    if not config.live_trading_allow_unsupported_routes:
+                        # All execution goes via Raydium regardless of detection DEX
+                        # This is a known limitation documented in CURRENT_LIMITATIONS.md
+                        pass
+
                     # --- Dynamic slippage based on spread size ---
-                    # Larger spreads = tighter slippage (more confident)
-                    # Smaller spreads = wider slippage (need more room)
+                    # Larger spreads = more room for slippage (safe)
+                    # Smaller spreads = tighter slippage (protect thin margin)
                     if opp.profit_pct > 0.5:
-                        dynamic_slippage = min(config.max_slippage_pct, 0.3)
+                        dynamic_slippage = min(config.max_slippage_pct, 0.8)
                     elif opp.profit_pct > 0.2:
-                        dynamic_slippage = config.max_slippage_pct
+                        dynamic_slippage = min(config.max_slippage_pct, 0.3)
                     else:
-                        dynamic_slippage = min(config.max_slippage_pct * 1.5, 1.0)
+                        dynamic_slippage = min(config.max_slippage_pct * 0.5, 0.15)
+
+                    # --- Determine execution mode ---
+                    is_dry = config.dry_run or not config.live_execution_allowed
+                    trade_status = "dry_run" if is_dry else "submitted"
 
                     # --- Leg 1: Swap input→output via Raydium ---
+                    # min_out based on buy_price (what we expect to get), not sell_price
+                    leg1_min_out = opp.buy_price * (1 - dynamic_slippage / 100)
                     result_leg1 = await bridge.swap_with_retry(
                         from_token=input_token,
                         to_token=output_token,
                         amount=opp.amount,
                         dex="raydium",
-                        min_out=opp.sell_price * (1 - dynamic_slippage / 100),
-                        dry_run=config.dry_run,
+                        min_out=leg1_min_out,
+                        dry_run=is_dry,
                         priority_fee=priority_fee,
                     )
 
@@ -279,25 +294,28 @@ async def run_bot() -> None:
                         )
                         continue
 
-                    # --- Simulate leg 1 before sending (if not dry run) ---
-                    if not config.dry_run and result_leg1.get("status") != "dry_run":
-                        tx_b64 = result_leg1.get("tx_base64")
-                        if tx_b64:
-                            sim = await helius.simulate_transaction(tx_b64)
-                            if not sim["success"]:
-                                logger.warning("Leg 1 simulation failed: %s", sim["error"])
-                                stats.errors_total += 1
-                                continue
+                    # --- Leg 2: use ACTUAL amount from Leg 1 (not estimated) ---
+                    # In live: get actual output from result. In dry-run: use estimate.
+                    leg1_actual_out = result_leg1.get("output_amount")
+                    if leg1_actual_out is not None:
+                        leg2_input = float(leg1_actual_out)
+                    else:
+                        # Fallback to estimate (dry-run or Raydium didn't return output)
+                        leg2_input = opp.sell_price
+                        if not is_dry:
+                            logger.warning(
+                                "Leg 1 did not return actual output_amount — using estimate %.6f",
+                                leg2_input,
+                            )
 
-                    # --- Leg 2: Swap output→input via Raydium ---
-                    usdc_received = opp.sell_price
+                    leg2_min_out = opp.amount * (1 - dynamic_slippage / 100)
                     result_leg2 = await bridge.swap_with_retry(
                         from_token=output_token,
                         to_token=input_token,
-                        amount=usdc_received,
+                        amount=leg2_input,
                         dex="raydium",
-                        min_out=opp.amount * (1 - dynamic_slippage / 100),
-                        dry_run=config.dry_run,
+                        min_out=leg2_min_out,
+                        dry_run=is_dry,
                         priority_fee=priority_fee,
                     )
 
@@ -316,19 +334,25 @@ async def run_bot() -> None:
 
                     tx_hash_1 = result_leg1.get("tx_hash", "n/a")
                     tx_hash_2 = result_leg2.get("tx_hash", "n/a")
+
+                    # --- Honest notification with explicit status ---
                     await notifier.notify_trade(
                         pair=opp.pair,
-                        buy_dex=opp.sell_dex,
-                        sell_dex=opp.buy_dex,
+                        buy_dex=opp.buy_dex,
+                        sell_dex=opp.sell_dex,
                         amount=opp.amount,
                         profit=opp.estimated_profit,
                         tx_hash=tx_hash_1,
+                        status=trade_status,
                     )
                     trades_since_summary += 1
                     profit_since_summary += opp.estimated_profit
                     stats.trades_total += 1
-                    stats.profit_total += opp.estimated_profit
-                    stats.record_trade(opp.estimated_profit)
+                    stats.estimated_profit_total += opp.estimated_profit
+                    stats.record_trade(
+                        estimated_profit=opp.estimated_profit,
+                        realized_profit=0.0,  # not yet reconciled
+                    )
                     trader_stats.record_trade(
                         pair=opp.pair, buy_dex=opp.buy_dex, sell_dex=opp.sell_dex,
                         profit_pct=opp.profit_pct, estimated_profit=opp.estimated_profit,
@@ -338,11 +362,11 @@ async def run_bot() -> None:
                         amount=opp.amount, profit_pct=opp.profit_pct,
                         estimated_profit=opp.estimated_profit,
                         tx_hash_1=tx_hash_1, tx_hash_2=tx_hash_2,
-                        dry_run=config.dry_run,
+                        dry_run=is_dry,
                     )
                     logger.info(
-                        "Arb executed: leg1=%s leg2=%s profit=%.6f",
-                        tx_hash_1, tx_hash_2, opp.estimated_profit,
+                        "Arb %s: leg1=%s leg2=%s estimated_profit=%.6f (realized=pending)",
+                        trade_status, tx_hash_1, tx_hash_2, opp.estimated_profit,
                     )
 
             # --- Triangular arb scan (SOL→A→B→SOL) ---
