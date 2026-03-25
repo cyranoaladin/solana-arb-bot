@@ -26,7 +26,11 @@ except ImportError:
 
 @dataclass
 class Opportunity:
-    """A detected arbitrage opportunity between two DEXes."""
+    """A detected arbitrage opportunity between two DEXes.
+
+    This is an OBSERVED opportunity. It may or may not be executable.
+    Use execution_policy.evaluate_opportunity() to determine if it can be traded.
+    """
 
     pair: str
     buy_dex: str
@@ -36,6 +40,11 @@ class Opportunity:
     amount: float
     profit_pct: float
     estimated_profit: float
+    # Quote metadata — set by the detector from the source quotes
+    buy_quote_kind: str = "reference"   # "reference" | "executable"
+    sell_quote_kind: str = "reference"
+    buy_executable: bool = False
+    sell_executable: bool = False
 
 
 # Base tx fee on Solana (5000 lamports). Priority fees added separately.
@@ -139,6 +148,10 @@ class ArbitrageDetector:
                     amount=buy.input_amount,
                     profit_pct=profit_pct,
                     estimated_profit=net_profit,
+                    buy_quote_kind=getattr(buy, "quote_kind", "reference"),
+                    sell_quote_kind=getattr(sell, "quote_kind", "reference"),
+                    buy_executable=getattr(buy, "executable", False),
+                    sell_executable=getattr(sell, "executable", False),
                 )
                 opportunities.append(opp)
 
