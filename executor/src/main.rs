@@ -21,6 +21,7 @@ fn main() {
             keypair_path,
             dry_run,
             priority_fee,
+            slippage_bps,
         } => {
             if dry_run {
                 Ok(json!({
@@ -32,7 +33,7 @@ fn main() {
                     "min_out": min_out
                 }))
             } else {
-                swap::execute_swap(&from, &to, amount, &dex, min_out, &rpc_url, &keypair_path, priority_fee)
+                swap::execute_swap(&from, &to, amount, &dex, min_out, &rpc_url, &keypair_path, priority_fee, slippage_bps)
             }
         }
         Commands::Balance {
@@ -172,7 +173,7 @@ fn run_loop(
                         // Execute via Raydium swap API
                         match swap::execute_swap(
                             input_token, output_token, amount, "raydium",
-                            opp.sell_price * 0.995, rpc_url, keypair_path, 500_000,
+                            opp.sell_price * 0.995, rpc_url, keypair_path, 500_000, 50,
                         ) {
                             Ok(result) => {
                                 let tx = result.get("tx_hash").and_then(|v| v.as_str()).unwrap_or("n/a");
@@ -182,7 +183,7 @@ fn run_loop(
                         }
                         match swap::execute_swap(
                             output_token, input_token, opp.sell_price, "raydium",
-                            amount * 0.995, rpc_url, keypair_path, 500_000,
+                            amount * 0.995, rpc_url, keypair_path, 500_000, 50,
                         ) {
                             Ok(result) => {
                                 let tx = result.get("tx_hash").and_then(|v| v.as_str()).unwrap_or("n/a");

@@ -28,6 +28,9 @@ pub enum Commands {
         dry_run: bool,
         #[arg(long, default_value_t = 500000)]
         priority_fee: u64,
+        /// Slippage tolerance in basis points (overrides hardcoded default)
+        #[arg(long, default_value_t = 50)]
+        slippage_bps: u64,
     },
     Balance {
         #[arg(long)]

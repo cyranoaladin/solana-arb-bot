@@ -94,15 +94,19 @@ pub fn execute_swap(
     rpc_url: &str,
     keypair_path: &str,
     priority_fee: u64,
+    slippage_bps: u64,
 ) -> Result<Value> {
     let keypair = read_keypair_file(keypair_path)
         .map_err(|e| anyhow::anyhow!("Failed to read keypair: {}", e))?;
     let wallet_pubkey = keypair.pubkey().to_string();
 
     match dex {
-        "raydium" => execute_raydium_swap(from, to, amount, min_out, rpc_url, keypair_path, &wallet_pubkey, priority_fee),
-        "orca" => execute_orca_swap(from, to, amount, min_out, rpc_url, keypair_path, &wallet_pubkey),
-        _ => anyhow::bail!("Unsupported DEX: {}", dex),
+        "raydium" => execute_raydium_swap(from, to, amount, min_out, rpc_url, keypair_path, &wallet_pubkey, priority_fee, slippage_bps),
+        "orca" => anyhow::bail!(
+            "BLOCKED: Orca live execution not supported. Orca is observation-only in this build. \
+             Use dex=raydium for execution."
+        ),
+        _ => anyhow::bail!("Unsupported DEX: {}. Only 'raydium' is supported for live execution.", dex),
     }
 }
 
@@ -129,17 +133,18 @@ fn execute_raydium_swap(
     from: &str,
     to: &str,
     amount: f64,
-    _min_out: f64,
+    min_out: f64,
     rpc_url: &str,
     keypair_path: &str,
     wallet_pubkey: &str,
     priority_fee: u64,
+    slippage_bps: u64,
 ) -> Result<Value> {
     let input_mint = get_mint(from)?;
     let output_mint = get_mint(to)?;
     let input_decimals = get_decimals(from)?;
+    let output_decimals = get_decimals(to)?;
     let amount_raw = (amount * 10f64.powi(input_decimals as i32)) as u64;
-    let slippage_bps = 50u64; // 0.5% default
 
     let http = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -169,6 +174,20 @@ fn execute_raydium_swap(
     let compute_data = compute_resp
         .get("data")
         .ok_or_else(|| anyhow::anyhow!("No data in Raydium compute response"))?;
+
+    // Extract output amount from compute response and verify min_out
+    let output_amount_raw = compute_data
+        .get("outputAmount")
+        .and_then(|v| v.as_str().and_then(|s| s.parse::<u64>().ok()).or_else(|| v.as_u64()))
+        .unwrap_or(0);
+    let output_amount = output_amount_raw as f64 / 10f64.powi(output_decimals as i32);
+
+    if min_out > 0.0 && output_amount < min_out {
+        anyhow::bail!(
+            "Raydium quote output {:.6} < min_out {:.6} — trade rejected to protect against slippage",
+            output_amount, min_out
+        );
+    }
 
     // Step 2: Build swap transaction (with priority fee for faster inclusion)
     let tx_body = json!({
@@ -224,27 +243,17 @@ fn execute_raydium_swap(
         "dex": "raydium",
         "from": from,
         "to": to,
-        "amount": amount
+        "amount": amount,
+        "output_amount": output_amount,
+        "min_out": min_out,
+        "slippage_bps": slippage_bps,
+        "priority_fee": priority_fee
     }))
 }
 
-fn execute_orca_swap(
-    _from: &str,
-    _to: &str,
-    _amount: f64,
-    _min_out: f64,
-    _rpc_url: &str,
-    _keypair_path: &str,
-    _wallet_pubkey: &str,
-) -> Result<Value> {
-    // Orca does not expose an HTTP swap API.
-    // Swaps require the TypeScript Whirlpool SDK or raw instruction building.
-    // For now, route all execution through Raydium.
-    anyhow::bail!(
-        "Orca swap execution not available — Orca has no HTTP swap API. \
-         Use Raydium for execution (Orca used for price discovery only)."
-    )
-}
+// NOTE: Orca execution is NOT supported. Orca is used for price observation only.
+// The execute_swap() function blocks Orca with an explicit error message.
+// This is intentional — Orca has no HTTP swap API.
 
 #[cfg(test)]
 mod tests {

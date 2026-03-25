@@ -22,7 +22,7 @@ from detector.health import BotStats, start_health_server
 from detector.ml_scorer import OpportunityScorer
 from detector.nightly_report import run_nightly_report
 from detector.arb_control_mcp import set_bot_state
-from detector.ws_price_feed import WebSocketPriceFeed
+from detector.ws_price_feed import BackgroundPriceFeed
 from detector.db import TradeDB
 from detector.oracle import PythOracle
 from detector.trader_stats import TraderStats
@@ -110,7 +110,7 @@ async def run_bot() -> None:
 
     # Deduplicate all pairs for the WebSocket price feed
     all_pairs = list(dict.fromkeys(PAIRS + TRIANGULAR_PAIRS))
-    ws_feed = WebSocketPriceFeed(price_fetcher=fetcher, pairs=all_pairs, poll_interval=0.5)
+    ws_feed = BackgroundPriceFeed(price_fetcher=fetcher, pairs=all_pairs, poll_interval=0.5)
 
     # PostgreSQL trade storage (graceful if unavailable)
     trade_db = TradeDB()
@@ -247,12 +247,25 @@ async def run_bot() -> None:
 
                     # --- Route support check ---
                     # Only Raydium execution is supported. Both legs go through Raydium.
-                    # This is NOT true cross-DEX execution.
-                    route_supported = True
-                    if not config.live_trading_allow_unsupported_routes:
-                        # All execution goes via Raydium regardless of detection DEX
-                        # This is a known limitation documented in CURRENT_LIMITATIONS.md
-                        pass
+                    # Opportunities detected via non-executable DEXes (Orca, Meteora,
+                    # Lifinity) are observation-only: the spread was observed between
+                    # reference prices, but execution routes through Raydium for both legs.
+                    #
+                    # If LIVE_TRADING_ALLOW_UNSUPPORTED_ROUTES=false (default),
+                    # block live trades where detection DEX ≠ execution DEX.
+                    if config.live_execution_allowed and not config.live_trading_allow_unsupported_routes:
+                        # Check if both sides of the opportunity are executable
+                        # Since only Raydium is executable, block if detection came from non-Raydium
+                        if opp.buy_dex != "raydium" or opp.sell_dex != "raydium":
+                            block_reason = (
+                                f"Route {opp.buy_dex}->{opp.sell_dex} not supported for live. "
+                                f"Only raydium<->raydium is executable. "
+                                f"Detection DEXes (Orca/Meteora/Lifinity) are observation-only."
+                            )
+                            logger.info("Trade blocked: %s", block_reason)
+                            stats.opportunities_blocked += 1
+                            await notifier.notify_trade_blocked(opp.pair, block_reason)
+                            continue
 
                     # --- Dynamic slippage based on spread size ---
                     # Larger spreads = more room for slippage (safe)
@@ -369,7 +382,10 @@ async def run_bot() -> None:
                         trade_status, tx_hash_1, tx_hash_2, opp.estimated_profit,
                     )
 
-            # --- Triangular arb scan (SOL→A→B→SOL) ---
+            # --- Triangular arb scan (OBSERVATION ONLY — no execution) ---
+            # Triangular arbitrage detection is observation-only.
+            # Execution requires 3 atomic transactions (Jito bundles),
+            # which are not wired to the main loop in this build.
             try:
                 tri_quotes: dict[str, list] = {}
                 for in_tok, out_tok in TRIANGULAR_PAIRS:
@@ -383,10 +399,13 @@ async def run_bot() -> None:
                     )
                     stats.opportunities_seen += len(tri_opps)
                     for opp in tri_opps:
-                        logger.info("Triangular opportunity: %s profit=%.4f%%", opp.pair, opp.profit_pct)
-                        # Log only — triangular execution requires Jito bundles (3 atomic txs)
-                        await notifier.alert(
-                            f"Triangular arb detected: {opp.pair} profit={opp.profit_pct:.4f}%"
+                        logger.info(
+                            "Triangular opportunity OBSERVED (not executable): %s profit=%.4f%%",
+                            opp.pair, opp.profit_pct,
+                        )
+                        await notifier.notify_opportunity_observed(
+                            pair=opp.pair, buy_dex=opp.buy_dex,
+                            sell_dex=opp.sell_dex, profit_pct=opp.profit_pct,
                         )
             except Exception:
                 logger.debug("Triangular scan error", exc_info=True)

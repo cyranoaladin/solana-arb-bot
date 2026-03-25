@@ -1,4 +1,4 @@
-"""WebSocket price feeds for real-time price updates."""
+"""Background price polling feed (NOT WebSocket — HTTP polling at 500ms)."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class PriceCache:
         return quotes
 
 
-class WebSocketPriceFeed:
+class BackgroundPriceFeed:
     """Manages background price polling at high frequency (500ms) as a step toward full WebSocket.
 
     Uses asyncio tasks to continuously fetch prices in the background,
@@ -75,7 +75,7 @@ class WebSocketPriceFeed:
         for input_tok, output_tok in self.pairs:
             task = asyncio.create_task(self._poll_pair(input_tok, output_tok))
             self._tasks.append(task)
-        logger.info("WebSocket price feed started for %d pairs (poll=%.1fs)", len(self.pairs), self.poll_interval)
+        logger.info("Background price feed started for %d pairs (poll=%.1fs)", len(self.pairs), self.poll_interval)
 
     async def stop(self) -> None:
         """Stop all background polling tasks."""
@@ -84,7 +84,7 @@ class WebSocketPriceFeed:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
-        logger.info("WebSocket price feed stopped")
+        logger.info("Background price feed stopped")
 
     async def _poll_pair(self, input_token: str, output_token: str) -> None:
         """Continuously poll prices for a single pair."""

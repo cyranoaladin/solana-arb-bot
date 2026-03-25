@@ -27,14 +27,22 @@ LIFINITY_POOLS_URL = "https://api.lifinity.io/pools"
 
 @dataclass
 class PriceQuote:
-    """A price quote from a DEX."""
+    """A price quote from a DEX.
+
+    quote_kind: 'executable' (amount-specific swap quote) or 'reference' (pool spot price)
+    executable: whether this DEX supports live swap execution in this build
+    amount_specific: whether the quote was computed for the exact input_amount
+    """
     dex: str
     input_token: str
     output_token: str
     input_amount: float
     output_amount: float
     price: float
-    liquidity: float = 0.0  # TVL or liquidity in USD (0 = unknown)
+    liquidity: float = 0.0
+    quote_kind: str = "reference"  # "reference" | "executable"
+    executable: bool = False       # can this DEX execute a live swap?
+    amount_specific: bool = False  # was this quote for the exact amount?
 
 
 class PriceFetcher:
@@ -269,38 +277,42 @@ class PriceFetcher:
             orca_task, raydium_task, meteora_task, lifinity_task,
         )
 
-        # Orca: tuple (output_amount, liquidity) or None
+        # Orca: pool spot price (reference only — no HTTP swap API)
         if orca_result is not None and orca_result[0] > 0:
             out_amount, liq = orca_result
             quotes.append(PriceQuote(
                 dex="orca", input_token=input_token, output_token=output_token,
                 input_amount=amount, output_amount=out_amount, price=out_amount / amount,
                 liquidity=liq,
+                quote_kind="reference", executable=False, amount_specific=False,
             ))
 
-        # Raydium: plain float, no liquidity info
+        # Raydium: compute/swap API (executable, amount-specific)
         if raydium_out is not None and raydium_out > 0:
             quotes.append(PriceQuote(
                 dex="raydium", input_token=input_token, output_token=output_token,
                 input_amount=amount, output_amount=raydium_out, price=raydium_out / amount,
                 liquidity=0.0,
+                quote_kind="executable", executable=True, amount_specific=True,
             ))
 
-        # Meteora: tuple (output_amount, liquidity) or None
+        # Meteora: pool spot price (reference only — no swap API in this build)
         if meteora_result is not None and meteora_result[0] > 0:
             out_amount, liq = meteora_result
             quotes.append(PriceQuote(
                 dex="meteora", input_token=input_token, output_token=output_token,
                 input_amount=amount, output_amount=out_amount, price=out_amount / amount,
                 liquidity=liq,
+                quote_kind="reference", executable=False, amount_specific=False,
             ))
 
-        # Lifinity: plain float, no liquidity info
+        # Lifinity: best-effort (reference only — API not publicly available)
         if lifinity_out is not None and lifinity_out > 0:
             quotes.append(PriceQuote(
                 dex="lifinity", input_token=input_token, output_token=output_token,
                 input_amount=amount, output_amount=lifinity_out, price=lifinity_out / amount,
                 liquidity=0.0,
+                quote_kind="reference", executable=False, amount_specific=False,
             ))
 
         return quotes
