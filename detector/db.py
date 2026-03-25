@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")  # No weak default — must be explicitly configured
 
-# Schema
+# Schema — idempotent (CREATE IF NOT EXISTS + ALTER IF NOT EXISTS pattern)
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS trades (
     id SERIAL PRIMARY KEY,
@@ -22,10 +22,19 @@ CREATE TABLE IF NOT EXISTS trades (
     amount DOUBLE PRECISION NOT NULL,
     profit_pct DOUBLE PRECISION NOT NULL,
     estimated_profit DOUBLE PRECISION NOT NULL,
+    realized_profit DOUBLE PRECISION DEFAULT 0,
     fee DOUBLE PRECISION DEFAULT 0,
+    priority_fee DOUBLE PRECISION DEFAULT 0,
     tx_hash_1 VARCHAR(100),
     tx_hash_2 VARCHAR(100),
-    status VARCHAR(20) DEFAULT 'executed',
+    bundle_id VARCHAR(100),
+    status VARCHAR(30) DEFAULT 'submitted',
+    execution_mode VARCHAR(30) DEFAULT 'dry_run',
+    block_reason TEXT,
+    route_supported BOOLEAN DEFAULT TRUE,
+    buy_quote_kind VARCHAR(20) DEFAULT 'reference',
+    sell_quote_kind VARCHAR(20) DEFAULT 'reference',
+    settlement_status VARCHAR(30) DEFAULT 'pending',
     dry_run BOOLEAN DEFAULT TRUE
 );
 
@@ -35,12 +44,33 @@ CREATE TABLE IF NOT EXISTS price_snapshots (
     pair VARCHAR(20) NOT NULL,
     dex VARCHAR(20) NOT NULL,
     price DOUBLE PRECISION NOT NULL,
-    output_amount DOUBLE PRECISION NOT NULL
+    output_amount DOUBLE PRECISION NOT NULL,
+    quote_kind VARCHAR(20) DEFAULT 'reference'
 );
 
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
 CREATE INDEX IF NOT EXISTS idx_trades_pair ON trades(pair);
+CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
+CREATE INDEX IF NOT EXISTS idx_trades_execution_mode ON trades(execution_mode);
 CREATE INDEX IF NOT EXISTS idx_price_snapshots_timestamp ON price_snapshots(timestamp);
+"""
+
+# Migration for existing databases — add columns if they don't exist
+MIGRATE_SQL = """
+DO $$
+BEGIN
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_profit DOUBLE PRECISION DEFAULT 0;
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS priority_fee DOUBLE PRECISION DEFAULT 0;
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS bundle_id VARCHAR(100);
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(30) DEFAULT 'dry_run';
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS block_reason TEXT;
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS route_supported BOOLEAN DEFAULT TRUE;
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS buy_quote_kind VARCHAR(20) DEFAULT 'reference';
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS sell_quote_kind VARCHAR(20) DEFAULT 'reference';
+    ALTER TABLE trades ADD COLUMN IF NOT EXISTS settlement_status VARCHAR(30) DEFAULT 'pending';
+    ALTER TABLE price_snapshots ADD COLUMN IF NOT EXISTS quote_kind VARCHAR(20) DEFAULT 'reference';
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 """
 
 
@@ -64,14 +94,15 @@ class TradeDB:
         return self._conn
 
     def init_schema(self) -> bool:
-        """Create tables if they don't exist."""
+        """Create tables if they don't exist, and migrate existing ones."""
         conn = self._get_conn()
         if not conn:
             return False
         try:
             with conn.cursor() as cur:
                 cur.execute(CREATE_TABLES_SQL)
-            logger.info("PostgreSQL schema initialized")
+                cur.execute(MIGRATE_SQL)
+            logger.info("PostgreSQL schema initialized + migrated")
             return True
         except Exception:
             logger.exception("Failed to initialize schema")

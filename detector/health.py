@@ -67,6 +67,8 @@ class BotStats:
             "opportunities_blocked": self.opportunities_blocked,
             "errors_total": self.errors_total,
             "last_scan_sec_ago": round(time.time() - self.last_scan_ts, 1) if self.last_scan_ts else None,
+            "atomic_execution_available": False,  # Jito not wired to main loop
+            "supported_live_routes": ["raydium->raydium"],
         }
 
 
