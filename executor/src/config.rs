@@ -76,6 +76,27 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
+    /// Build a swap transaction WITHOUT sending it. Returns base64 tx for bundling.
+    BuildSwap {
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        amount: f64,
+        #[arg(long)]
+        dex: String,
+        #[arg(long)]
+        min_out: f64,
+        #[arg(long)]
+        rpc_url: String,
+        #[arg(long)]
+        keypair_path: String,
+        #[arg(long, default_value_t = 500000)]
+        priority_fee: u64,
+        #[arg(long, default_value_t = 50)]
+        slippage_bps: u64,
+    },
     /// Send a Jito bundle of base64-encoded transactions (MEV-protected, atomic).
     SendBundle {
         /// Comma-separated base64-encoded transactions

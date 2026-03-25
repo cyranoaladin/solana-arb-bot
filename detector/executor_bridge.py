@@ -145,6 +145,36 @@ class ExecutorBridge:
         logger.error("Swap failed after %d attempts: %s", max_retries + 1, last_result.get("message"))
         return last_result
 
+    async def build_swap(
+        self,
+        from_token: str,
+        to_token: str,
+        amount: float,
+        dex: str,
+        min_out: float,
+        priority_fee: int = 500_000,
+        slippage_bps: int = 50,
+    ) -> dict:
+        """Build a swap transaction WITHOUT sending it.
+
+        Returns {"status": "ok", "tx_base64": "...", "output_amount": ...}
+        The tx_base64 can then be sent via send_bundle() for atomic execution.
+        """
+        args = [
+            self.executor_path,
+            "build-swap",
+            "--from", from_token,
+            "--to", to_token,
+            "--amount", str(amount),
+            "--dex", dex,
+            "--min-out", str(min_out),
+            "--rpc-url", self.rpc_url,
+            "--keypair-path", self.keypair_path,
+            "--priority-fee", str(priority_fee),
+            "--slippage-bps", str(slippage_bps),
+        ]
+        return await self._run(args)
+
     async def sign_and_send(self, tx_base64: str) -> dict:
         """Sign a base64-encoded transaction and send it to the network."""
         args = [

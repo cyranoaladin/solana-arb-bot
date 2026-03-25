@@ -255,6 +255,116 @@ fn execute_raydium_swap(
 // The execute_swap() function blocks Orca with an explicit error message.
 // This is intentional — Orca has no HTTP swap API.
 
+/// Build a swap transaction WITHOUT sending it.
+/// Returns the base64-encoded signed transaction for use in Jito bundles.
+#[allow(clippy::too_many_arguments)]
+pub fn build_swap(
+    from: &str,
+    to: &str,
+    amount: f64,
+    dex: &str,
+    min_out: f64,
+    _rpc_url: &str,
+    keypair_path: &str,
+    priority_fee: u64,
+    slippage_bps: u64,
+) -> Result<Value> {
+    if dex != "raydium" {
+        anyhow::bail!("BLOCKED: Only raydium is supported for build-swap. {} is observation-only.", dex);
+    }
+
+    let keypair = read_keypair_file(keypair_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read keypair: {}", e))?;
+    let wallet_pubkey = keypair.pubkey().to_string();
+
+    let input_mint = get_mint(from)?;
+    let output_mint = get_mint(to)?;
+    let input_decimals = get_decimals(from)?;
+    let output_decimals = get_decimals(to)?;
+    let amount_raw = (amount * 10f64.powi(input_decimals as i32)) as u64;
+
+    let http = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    // Step 1: Compute swap route
+    let compute_url = format!(
+        "https://transaction-v1.raydium.io/compute/swap-base-in?inputMint={}&outputMint={}&amount={}&slippageBps={}&txVersion=V0",
+        input_mint, output_mint, amount_raw, slippage_bps
+    );
+
+    let compute_resp: Value = http.get(&compute_url).send()?.json()?;
+
+    if !compute_resp.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let msg = compute_resp.get("msg").and_then(|v| v.as_str()).unwrap_or("Unknown");
+        anyhow::bail!("Raydium compute failed: {}", msg);
+    }
+
+    let compute_data = compute_resp.get("data")
+        .ok_or_else(|| anyhow::anyhow!("No data in compute response"))?;
+
+    // Extract and verify output amount
+    let output_amount_raw = compute_data
+        .get("outputAmount")
+        .and_then(|v| v.as_str().and_then(|s| s.parse::<u64>().ok()).or_else(|| v.as_u64()))
+        .unwrap_or(0);
+    let output_amount = output_amount_raw as f64 / 10f64.powi(output_decimals as i32);
+
+    if min_out > 0.0 && output_amount < min_out {
+        anyhow::bail!(
+            "Raydium quote output {:.6} < min_out {:.6} — build rejected",
+            output_amount, min_out
+        );
+    }
+
+    // Step 2: Build transaction (DO NOT SEND)
+    let tx_body = json!({
+        "swapResponse": compute_data,
+        "wallet": wallet_pubkey,
+        "wrapSol": from == "SOL",
+        "unwrapSol": to == "SOL",
+        "txVersion": "V0",
+        "computeUnitPriceMicroLamports": priority_fee.to_string()
+    });
+
+    let tx_resp: Value = http
+        .post("https://transaction-v1.raydium.io/transaction/swap-base-in")
+        .json(&tx_body)
+        .send()?
+        .json()?;
+
+    if !tx_resp.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        let msg = tx_resp.get("msg").and_then(|v| v.as_str()).unwrap_or("Unknown");
+        anyhow::bail!("Raydium transaction build failed: {}", msg);
+    }
+
+    let transactions = tx_resp.get("data").and_then(|d| d.as_array())
+        .ok_or_else(|| anyhow::anyhow!("No transaction data"))?;
+
+    if transactions.is_empty() {
+        anyhow::bail!("Raydium returned no transactions");
+    }
+
+    // Return the FIRST transaction base64 (don't sign or send)
+    let tx_b64 = transactions[0]
+        .get("transaction")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing transaction field"))?;
+
+    Ok(json!({
+        "status": "ok",
+        "tx_base64": tx_b64,
+        "output_amount": output_amount,
+        "min_out": min_out,
+        "slippage_bps": slippage_bps,
+        "priority_fee": priority_fee,
+        "dex": "raydium",
+        "from": from,
+        "to": to,
+        "amount": amount
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -36,6 +36,14 @@ class BotConfig:
         default_factory=lambda: os.getenv("LIVE_TRADING_ALLOW_UNSUPPORTED_ROUTES", "false").lower() == "true"
     )
 
+    # Jito atomic bundles for live trades
+    use_jito_bundles: bool = field(
+        default_factory=lambda: os.getenv("USE_JITO_BUNDLES", "true").lower() in ("true", "1", "yes")
+    )
+    jito_tip_lamports: int = field(
+        default_factory=lambda: int(os.getenv("JITO_TIP_LAMPORTS", "50000"))
+    )
+
     # Bind hosts (127.0.0.1 = internal only, 0.0.0.0 = public)
     health_bind_host: str = field(default_factory=lambda: os.getenv("HEALTH_BIND_HOST", "127.0.0.1"))
     dashboard_bind_host: str = field(default_factory=lambda: os.getenv("DASHBOARD_BIND_HOST", "127.0.0.1"))

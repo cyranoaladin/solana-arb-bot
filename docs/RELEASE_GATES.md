@@ -40,8 +40,14 @@
 | Meteora live execution | No swap API in this build |
 | Lifinity live execution | No public API |
 | Triangular arb execution | No execution path |
-| Jito atomic bundles in main loop | Code exists but not wired |
-| Realized PnL tracking | No on-chain reconciliation |
+
+## Now available
+
+| Feature | Status |
+|---------|--------|
+| Jito atomic bundles | WIRED to main loop (USE_JITO_BUNDLES=true by default) |
+| Realized PnL tracking | Pre/post balance comparison after each trade |
+| build-swap CLI command | Builds tx without sending (for bundle composition) |
 
 ## Known residual risks
 

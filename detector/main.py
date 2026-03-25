@@ -280,80 +280,132 @@ async def run_bot() -> None:
                     # --- Determine execution mode ---
                     is_dry = config.dry_run or not config.live_execution_allowed
                     trade_status = "dry_run" if is_dry else "submitted"
+                    slippage_bps = int(dynamic_slippage * 100)  # convert % to bps
 
                     # --- Capture pre-trade balance for realized PnL ---
                     pre_trade_balance = balance if not is_dry else 0.0
 
-                    # --- Leg 1: Swap input→output via Raydium ---
-                    leg1_min_out = opp.buy_price * (1 - dynamic_slippage / 100)
-                    result_leg1 = await bridge.swap_with_retry(
-                        from_token=input_token,
-                        to_token=output_token,
-                        amount=opp.amount,
-                        dex="raydium",
-                        min_out=leg1_min_out,
-                        dry_run=is_dry,
-                        priority_fee=priority_fee,
-                    )
+                    tx_hash_1 = "n/a"
+                    tx_hash_2 = "n/a"
+                    bundle_id = ""
+                    leg1_output = 0.0
+                    execution_failed = False
 
-                    if result_leg1.get("status") == "error":
-                        logger.error("Leg 1 failed: %s", result_leg1.get("message"))
-                        stats.errors_total += 1
-                        trader_stats.record_trade(
-                            pair=opp.pair, buy_dex=opp.buy_dex, sell_dex=opp.sell_dex,
-                            profit_pct=opp.profit_pct, estimated_profit=opp.estimated_profit,
-                            success=False,
+                    if is_dry:
+                        # --- DRY RUN: simulate both legs separately ---
+                        result_leg1 = await bridge.swap_with_retry(
+                            from_token=input_token, to_token=output_token,
+                            amount=opp.amount, dex="raydium",
+                            min_out=opp.buy_price * (1 - dynamic_slippage / 100),
+                            dry_run=True, priority_fee=priority_fee,
                         )
-                        await notifier.alert(
-                            f"Leg 1 FAILED for {opp.pair}: {result_leg1.get('message', 'unknown')}"
+                        result_leg2 = await bridge.swap_with_retry(
+                            from_token=output_token, to_token=input_token,
+                            amount=opp.sell_price, dex="raydium",
+                            min_out=opp.amount * (1 - dynamic_slippage / 100),
+                            dry_run=True, priority_fee=priority_fee,
                         )
-                        continue
+                        if result_leg1.get("status") == "error" or result_leg2.get("status") == "error":
+                            execution_failed = True
+                    elif config.use_jito_bundles:
+                        # --- LIVE + JITO: build both txs, send as atomic bundle ---
+                        logger.info("Building atomic Jito bundle for %s", opp.pair)
 
-                    # --- Leg 2: use ACTUAL amount from Leg 1 ---
-                    leg1_actual_out = result_leg1.get("output_amount")
-                    if leg1_actual_out is not None:
-                        leg2_input = float(leg1_actual_out)
+                        # Build Leg 1 tx (don't send)
+                        build1 = await bridge.build_swap(
+                            from_token=input_token, to_token=output_token,
+                            amount=opp.amount, dex="raydium",
+                            min_out=opp.buy_price * (1 - dynamic_slippage / 100),
+                            priority_fee=priority_fee, slippage_bps=slippage_bps,
+                        )
+                        if build1.get("status") == "error":
+                            logger.error("Build Leg 1 failed: %s", build1.get("message"))
+                            stats.errors_total += 1
+                            execution_failed = True
+
+                        if not execution_failed:
+                            leg1_output = float(build1.get("output_amount", opp.sell_price))
+
+                            # Build Leg 2 tx using ACTUAL output from Leg 1 quote
+                            build2 = await bridge.build_swap(
+                                from_token=output_token, to_token=input_token,
+                                amount=leg1_output, dex="raydium",
+                                min_out=opp.amount * (1 - dynamic_slippage / 100),
+                                priority_fee=priority_fee, slippage_bps=slippage_bps,
+                            )
+                            if build2.get("status") == "error":
+                                logger.error("Build Leg 2 failed: %s", build2.get("message"))
+                                stats.errors_total += 1
+                                execution_failed = True
+
+                        if not execution_failed:
+                            tx1_b64 = build1.get("tx_base64", "")
+                            tx2_b64 = build2.get("tx_base64", "")
+                            if not tx1_b64 or not tx2_b64:
+                                logger.error("Missing tx_base64 from build — aborting bundle")
+                                stats.opportunities_blocked += 1
+                                execution_failed = True
+
+                        if not execution_failed:
+                            # Send both as atomic Jito bundle
+                            bundle_result = await bridge.send_bundle(
+                                [tx1_b64, tx2_b64],
+                                tip_lamports=config.jito_tip_lamports,
+                            )
+                            if bundle_result.get("status") == "error":
+                                logger.error("Jito bundle failed: %s", bundle_result.get("message"))
+                                stats.errors_total += 1
+                                execution_failed = True
+                            else:
+                                bundle_id = bundle_result.get("bundle_id", "")
+                                tx_hash_1 = f"bundle:{bundle_id}"
+                                tx_hash_2 = tx_hash_1
+                                trade_status = "submitted"
+                                logger.info(
+                                    "Jito bundle submitted: %s (tip=%d lamports)",
+                                    bundle_id, config.jito_tip_lamports,
+                                )
                     else:
-                        leg2_input = opp.sell_price
-                        if not is_dry:
-                            # In live: refuse to execute Leg 2 without actual output
-                            logger.error(
-                                "BLOCKED: Leg 1 did not return output_amount. "
-                                "Cannot determine Leg 2 input. Trade aborted."
-                            )
-                            stats.opportunities_blocked += 1
-                            await notifier.notify_trade_blocked(
-                                opp.pair,
-                                "Leg 1 output_amount missing — cannot proceed safely",
-                            )
-                            continue
+                        # --- LIVE + NO JITO: 2 separate legs (non-atomic, documented risk) ---
+                        logger.warning("Executing non-atomic 2-leg trade (Jito disabled)")
 
-                    leg2_min_out = opp.amount * (1 - dynamic_slippage / 100)
-                    result_leg2 = await bridge.swap_with_retry(
-                        from_token=output_token,
-                        to_token=input_token,
-                        amount=leg2_input,
-                        dex="raydium",
-                        min_out=leg2_min_out,
-                        dry_run=is_dry,
-                        priority_fee=priority_fee,
-                    )
+                        result_leg1 = await bridge.swap_with_retry(
+                            from_token=input_token, to_token=output_token,
+                            amount=opp.amount, dex="raydium",
+                            min_out=opp.buy_price * (1 - dynamic_slippage / 100),
+                            dry_run=False, priority_fee=priority_fee,
+                        )
+                        if result_leg1.get("status") == "error":
+                            logger.error("Leg 1 failed: %s", result_leg1.get("message"))
+                            execution_failed = True
+                        else:
+                            tx_hash_1 = result_leg1.get("tx_hash", "n/a")
+                            leg1_actual = result_leg1.get("output_amount")
+                            if leg1_actual is None:
+                                logger.error("BLOCKED: Leg 1 output_amount missing — cannot proceed")
+                                stats.opportunities_blocked += 1
+                                await notifier.notify_trade_blocked(opp.pair, "output_amount missing")
+                                execution_failed = True
+                            else:
+                                result_leg2 = await bridge.swap_with_retry(
+                                    from_token=output_token, to_token=input_token,
+                                    amount=float(leg1_actual), dex="raydium",
+                                    min_out=opp.amount * (1 - dynamic_slippage / 100),
+                                    dry_run=False, priority_fee=priority_fee,
+                                )
+                                if result_leg2.get("status") == "error":
+                                    logger.error("Leg 2 failed: %s", result_leg2.get("message"))
+                                    execution_failed = True
+                                else:
+                                    tx_hash_2 = result_leg2.get("tx_hash", "n/a")
 
-                    if result_leg2.get("status") == "error":
-                        logger.error("Leg 2 failed: %s", result_leg2.get("message"))
-                        stats.errors_total += 1
+                    if execution_failed:
                         trader_stats.record_trade(
                             pair=opp.pair, buy_dex=opp.buy_dex, sell_dex=opp.sell_dex,
                             profit_pct=opp.profit_pct, estimated_profit=opp.estimated_profit,
                             success=False,
                         )
-                        await notifier.alert(
-                            f"Leg 2 FAILED for {opp.pair}: {result_leg2.get('message', 'unknown')}"
-                        )
                         continue
-
-                    tx_hash_1 = result_leg1.get("tx_hash", "n/a")
-                    tx_hash_2 = result_leg2.get("tx_hash", "n/a")
 
                     # --- Realized PnL: check post-trade balance ---
                     realized_profit = 0.0
@@ -371,13 +423,9 @@ async def run_bot() -> None:
 
                     # --- Honest notification ---
                     await notifier.notify_trade(
-                        pair=opp.pair,
-                        buy_dex=opp.buy_dex,
-                        sell_dex=opp.sell_dex,
-                        amount=opp.amount,
-                        profit=opp.estimated_profit,
-                        tx_hash=tx_hash_1,
-                        status=trade_status,
+                        pair=opp.pair, buy_dex=opp.buy_dex, sell_dex=opp.sell_dex,
+                        amount=opp.amount, profit=opp.estimated_profit,
+                        tx_hash=tx_hash_1, status=trade_status,
                     )
                     trades_since_summary += 1
                     profit_since_summary += opp.estimated_profit
@@ -399,8 +447,8 @@ async def run_bot() -> None:
                         dry_run=is_dry,
                     )
                     logger.info(
-                        "Arb %s: leg1=%s leg2=%s estimated=%.6f realized=%.6f",
-                        trade_status, tx_hash_1, tx_hash_2,
+                        "Arb %s: leg1=%s leg2=%s bundle=%s estimated=%.6f realized=%.6f",
+                        trade_status, tx_hash_1, tx_hash_2, bundle_id or "none",
                         opp.estimated_profit, realized_profit,
                     )
 

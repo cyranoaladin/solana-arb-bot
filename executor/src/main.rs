@@ -76,6 +76,17 @@ fn main() {
             poll_interval_sec,
             dry_run,
         } => run_loop(&rpc_url, &keypair_path, amount, min_profit_pct, poll_interval_sec, dry_run),
+        Commands::BuildSwap {
+            from,
+            to,
+            amount,
+            dex,
+            min_out,
+            rpc_url,
+            keypair_path,
+            priority_fee,
+            slippage_bps,
+        } => swap::build_swap(&from, &to, amount, &dex, min_out, &rpc_url, &keypair_path, priority_fee, slippage_bps),
         Commands::SendBundle {
             transactions,
             rpc_url,

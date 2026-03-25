@@ -85,7 +85,7 @@ class TestHealthTruth:
     def test_atomic_execution_false(self):
         stats = BotStats()
         d = stats.to_dict()
-        assert d["atomic_execution_available"] is False
+        assert d["atomic_execution_available"] is True  # Jito now wired
 
     def test_supported_routes_raydium_only(self):
         stats = BotStats()
